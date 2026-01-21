@@ -1,4 +1,4 @@
-Welcome to {{PROJECT_NAME}}'s documentation!
+Welcome to ds-provider-azure-py-lib's documentation!
 =============================================
 
 .. toctree::
