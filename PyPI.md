@@ -1,4 +1,4 @@
-# {{PROJECT_NAME}}
+# ds-provider-azure-py-lib
 
 A Python package from the ds-common library collection.
 
@@ -7,21 +7,21 @@ A Python package from the ds-common library collection.
 Install the package using pip:
 
 ```bash
-pip install {{PROJECT_NAME}}
+pip install ds-provider-azure-py-lib
 ```
 
 Or using uv (recommended):
 
 ```bash
-uv pip install {{PROJECT_NAME}}
+uv pip install ds-provider-azure-py-lib
 ```
 
 ## Quick Start
 
 ```python
-from {{PYTHON_MODULE_NAME}} import __version__
+from ds_provider_azure_py_lib import __version__
 
-print(f"{{PROJECT_NAME}} version: {__version__}")
+print(f"ds-provider-azure-py-lib version: {__version__}")
 ```
 
 ## Features
@@ -37,7 +37,7 @@ print(f"{{PROJECT_NAME}} version: {__version__}")
 
 ```python
 # Example usage
-import {{PYTHON_MODULE_NAME}}
+import ds_provider_azure_py_lib
 
 # Your code examples here
 ```
@@ -57,8 +57,8 @@ import {{PYTHON_MODULE_NAME}}
 
 Full documentation is available at:
 
-- [GitHub Repository](https://github.com/grasp-labs/{{GITHUB_REPO}})
-- [Documentation Site](https://grasp-labs.github.io/{{GITHUB_REPO}}/)
+- [GitHub Repository](https://github.com/grasp-labs/ds-provider-azure-py-lib)
+- [Documentation Site](https://grasp-labs.github.io/ds-provider-azure-py-lib/)
 
 ## Development
 
@@ -66,8 +66,8 @@ To contribute or set up a development environment:
 
 ```bash
 # Clone the repository
-git clone https://github.com/grasp-labs/{{GITHUB_REPO}}.git
-cd {{GITHUB_REPO}}
+git clone https://github.com/grasp-labs/ds-provider-azure-py-lib.git
+cd ds-provider-azure-py-lib
 
 # Install development dependencies
 uv sync --all-extras --dev
@@ -76,15 +76,16 @@ uv sync --all-extras --dev
 make test
 ```
 
-See the [README](https://github.com/grasp-labs/{{GITHUB_REPO}}#readme) for more information.
+See the [README](https://github.com/grasp-labs/ds-provider-azure-py-lib#readme) for
+more information.
 
 ## License
 
 This package is licensed under the Apache License 2.0.
-See the [LICENSE-APACHE](https://github.com/grasp-labs/{{GITHUB_REPO}}/blob/main/LICENSE-APACHE)
+See the [LICENSE-APACHE](https://github.com/grasp-labs/ds-provider-azure-py-lib/blob/main/LICENSE-APACHE)
 file for details.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/grasp-labs/{{GITHUB_REPO}}/issues)
-- **Releases**: [GitHub Releases](https://github.com/grasp-labs/{{GITHUB_REPO}}/releases)
+- **Issues**: [GitHub Issues](https://github.com/grasp-labs/ds-provider-azure-py-lib/issues)
+- **Releases**: [GitHub Releases](https://github.com/grasp-labs/ds-provider-azure-py-lib/releases)
