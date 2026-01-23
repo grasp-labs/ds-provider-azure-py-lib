@@ -1,0 +1,17 @@
+package-name: azure
+name: azure
+description: Azure provider for the DS Business Workflow
+
+linked_service:
+  - name: Azure
+    kind: DS.RESOURCE.LINKED_SERVICE.AZURE
+    version: 1.0.0
+    description: Azure linked service
+    class_name: ds_provider_azure_py_lib.linked_service.azure.AzureLinkedService
+
+dataset:
+  - name: Azure
+    kind: DS.RESOURCE.DATASET.AZURE
+    version: 1.0.0
+    description: Azure dataset
+    class_name: ds_provider_azure_py_lib.dataset.azure.AzureDataset

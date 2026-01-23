@@ -22,13 +22,13 @@ repos:
         language: system
         entry: uv run ruff check
         args: [--config, .config/ruff.toml, --fix, --exit-non-zero-on-fix]
-        files: ^(src|tests)/
+        files: ^(src|tests)/.*\.py$
       - id: ruff-format
         name: ruff-format
         language: system
         entry: uv run ruff format
         args: [--config, .config/ruff.toml]
-        files: ^(src|tests)/
+        files: ^(src|tests)/.*\.py$
       - id: mypy
         name: mypy
         language: system

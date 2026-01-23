@@ -17,5 +17,9 @@ Example
 
 from importlib.metadata import version
 
-__version__ = version("ds-provider-azure-py-lib")
-__all__ = ["__version__"]
+PACKAGE_NAME = "ds-provider-azure-py-lib"
+__version__ = version(PACKAGE_NAME)
+
+__all__ = [
+    "__version__",
+]
