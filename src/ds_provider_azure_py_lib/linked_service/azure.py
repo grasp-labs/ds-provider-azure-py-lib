@@ -47,20 +47,39 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     credential: Any = None
 
     def __post_init__(self) -> None:
+        """
+        Post-initialization to set up the credential.
+        Returns:
+            None
+        """
+        self.check_settings_is_set()
         self.credential = self.settings.auth.get_credential(self.settings.account_name)
+
+    def check_settings_is_set(self) -> None:
+        """
+        Check if settings are set correctly.
+        Returns:
+            None
+        Raises:
+            AttributeError: If settings are not set correctly.
+        """
+        if not isinstance(self.settings, AzureLinkedServiceSettings):
+            raise AttributeError("settings not set.")
 
     @property
     def type(self) -> StrEnum:
         """
         Get the type of the linked service.
-        :return: str
+        Returns:
+             str
         """
         return ResourceType.STORAGE_ACCOUNT
 
     def connect_blob_service(self) -> None:
         """
         Connect to Azure Blob StorageAccount.
-        :return: BlobServiceClient
+        Returns:
+            BlobServiceClient
         """
         self.log.info("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
@@ -73,7 +92,8 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     def connect_table_service(self) -> None:
         """
         Connect to Azure Table StorageAccount.
-        :return: TableServiceClient
+        Returns:
+             TableServiceClient
         """
         self.log.info("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"
@@ -85,7 +105,8 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     def connect(self) -> tuple[BlobServiceClient, TableServiceClient]:
         """
         Connect to Azure Storage (Blob or Table).
-        :return: Union[BlobServiceClient, TableServiceClient]
+        Returns:
+            Union[BlobServiceClient, TableServiceClient]
         """
         if self.blob_service_client is None:
             self.connect_blob_service()
@@ -97,7 +118,8 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     def test_connection(self) -> tuple[bool, str]:
         """
         Test the connection to Azure Storage (Blob or Table).
-        :return: tuple[bool, str]
+        Returns:
+            tuple[bool, str]
         """
         try:
             blob_client, table_client = self.connect()
@@ -112,8 +134,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     def close(self) -> None:
         """
         No need to close the linked service. Just to comply with the interface.
-
         Returns:
-            None.
+            None
         """
         pass
