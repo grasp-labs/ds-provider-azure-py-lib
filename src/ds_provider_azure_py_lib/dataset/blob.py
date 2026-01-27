@@ -66,8 +66,8 @@ class AzureBlob(
     settings: AzureBlobDatasetSettingsType
     client: BlobServiceClient = field(init=False)
 
-    serializer: PandasSerializer = field(init=False)
-    deserializer: PandasDeserializer = field(init=False)
+    serializer: PandasSerializer
+    deserializer: PandasDeserializer
 
     def __post_init__(self) -> None:
         if not isinstance(self.linked_service, AzureLinkedService):
