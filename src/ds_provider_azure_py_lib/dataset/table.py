@@ -1,3 +1,13 @@
+"""
+**File:** ``table.py``
+**Region:** ``ds_provider_azure_py_lib/dataset/table``
+
+Azure Dataset - Table Storage
+
+This module implements a dataset for Azure Table Storage, allowing for CRUD operations
+on table entities using pandas DataFrames for data representation.
+"""
+
 import json
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
@@ -21,7 +31,7 @@ from ds_resource_plugin_py_lib.common.serde.deserialize import DataDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import DataSerializer
 
 from ..enums import ResourceType
-from ..linked_service.azure import AzureLinkedService
+from ..linked_service.storage_account import AzureLinkedService
 
 
 class AzureTableSerializer(DataSerializer, LoggingMixin):
@@ -147,20 +157,18 @@ class AzureTable(
         Returns:
             ResourceType
         """
-        return ResourceType.DATASET
+        return ResourceType.BLOB
 
     def _prepare_content(self) -> dict[str, Any]:
         """
         Ensure that the content is provided and is in the correct format.
         """
         if len(self.content) != 1:
-            # raise PreconditionFailedException("Azure Table Storage does not support batching.")   # noqa: ERA001
-            raise ValueError("Azure Table Storage does not support batching.")  # todo custom exception like above
+            raise NotImplementedError("Azure Table Storage does not support batching.")
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(self.content.columns):
-            # raise PreconditionFailedException(f"The DataFrame must contain the columns: {', '.join(required_columns)}")   # noqa: ERA001, E501
-            raise ValueError(f"The DataFrame must contain the columns: {', '.join(required_columns)}")  # todo
+            raise NotImplementedError(f"The DataFrame must contain the columns: {', '.join(required_columns)}")
 
         if self.serializer is None:
             raise ValueError("Serializer is not initialized.")

@@ -1,24 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from azure.core.credentials import AzureNamedKeyCredential
+
 from ds_provider_azure_py_lib.enums import ResourceType
-from ds_provider_azure_py_lib.linked_service.azure import AzureLinkedService, AzureLinkedServiceSettings
-
-
-def make_valid_settings():
-    """
-    Create a valid AzureLinkedServiceSettings mock for testing.
-    Returns:
-        Tuple[MagicMock, MagicMock]: A tuple containing the mock settings and mock credential.
-    """
-    mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
-    mock_settings.__class__ = AzureLinkedServiceSettings
-    mock_settings.account_name = "my_account"
-    mock_credential = MagicMock(name="credential")
-    mock_auth = MagicMock()
-    mock_auth.get_credential.return_value = mock_credential
-    mock_settings.auth = mock_auth
-    return mock_settings, mock_credential
+from ds_provider_azure_py_lib.linked_service.storage_account import AzureLinkedService, AzureLinkedServiceSettings
 
 
 class AzureLinkedServiceTests(unittest.TestCase):
@@ -32,11 +18,7 @@ class AzureLinkedServiceTests(unittest.TestCase):
 
         # provide account_name and an auth.get_credential return value
         mock_settings.account_name = "my_account"
-        mock_credential = MagicMock(name="credential")
-        mock_auth = MagicMock()
-        mock_auth.get_credential.return_value = mock_credential
-        mock_settings.auth = mock_auth
-
+        mock_settings.access_key = "123"
         # when
         azure_linked_service = AzureLinkedService(settings=mock_settings)
         # then
@@ -52,10 +34,7 @@ class AzureLinkedServiceTests(unittest.TestCase):
 
         # provide account_name and an auth.get_credential return value
         mock_settings.account_name = "my_account"
-        mock_credential = MagicMock(name="credential")
-        mock_auth = MagicMock()
-        mock_auth.get_credential.return_value = mock_credential
-        mock_settings.auth = mock_auth
+        mock_settings.access_key = "123"
 
         # when
         azure_linked_service = AzureLinkedService(settings=mock_settings)
@@ -69,17 +48,15 @@ class AzureLinkedServiceTests(unittest.TestCase):
         mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
         mock_settings.__class__ = AzureLinkedServiceSettings
         mock_settings.account_name = "my_account"
-        mock_credential = MagicMock(name="credential")
-        mock_auth = MagicMock()
-        mock_auth.get_credential.return_value = mock_credential
-        mock_settings.auth = mock_auth
+        mock_settings.access_key = "123"
         # when
         azure_linked_service = AzureLinkedService(settings=mock_settings)
         # then
-        self.assertIs(azure_linked_service.credential, mock_credential)
+        self.assertIs(azure_linked_service.credential.named_key.key, "123")
+        self.assertIsInstance(azure_linked_service.credential, AzureNamedKeyCredential)
 
-    @patch("ds_provider_azure_py_lib.linked_service.azure.BlobServiceClient")
-    @patch("ds_provider_azure_py_lib.linked_service.azure.TableServiceClient")
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient")
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.TableServiceClient")
     def test_connect_blob_and_table_create_clients(self, mock_table_client_cls, mock_blob_client_cls):
         """
         Test connecting to Blob and Table services creates the clients.
@@ -88,7 +65,10 @@ class AzureLinkedServiceTests(unittest.TestCase):
             mock_blob_client_cls:
         """
         # given
-        mock_settings, mock_credential = make_valid_settings()
+        mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
+        mock_settings.__class__ = AzureLinkedServiceSettings
+        mock_settings.account_name = "my_account"
+        mock_settings.access_key = "123"
 
         mock_blob_client = MagicMock()
         mock_table_client = MagicMock()
@@ -107,18 +87,18 @@ class AzureLinkedServiceTests(unittest.TestCase):
 
         mock_blob_client_cls.assert_called_with(
             account_url=f"https://{mock_settings.account_name}.blob.core.windows.net/",
-            credential=mock_credential,
+            credential=svc.credential,
         )
         mock_table_client_cls.assert_called_with(
             endpoint=f"https://{mock_settings.account_name}.table.core.windows.net/",
-            credential=mock_credential,
+            credential=svc.credential,
         )
         # then
         self.assertIs(svc.blob_service_client, mock_blob_client)
         self.assertIs(svc.table_service_client, mock_table_client)
 
-    @patch("ds_provider_azure_py_lib.linked_service.azure.BlobServiceClient")
-    @patch("ds_provider_azure_py_lib.linked_service.azure.TableServiceClient")
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient")
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.TableServiceClient")
     def test_connect_and_test_connection_success(self, mock_table_client_cls, mock_blob_client_cls):
         """
         Test connecting to Blob and Table services and testing connection succeeds.
@@ -126,7 +106,10 @@ class AzureLinkedServiceTests(unittest.TestCase):
             mock_table_client_cls:
             mock_blob_client_cls:
         """
-        mock_settings, _ = make_valid_settings()
+        mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
+        mock_settings.__class__ = AzureLinkedServiceSettings
+        mock_settings.account_name = "my_account"
+        mock_settings.access_key = "123"
 
         mock_blob_client = MagicMock()
         mock_table_client = MagicMock()
@@ -148,14 +131,17 @@ class AzureLinkedServiceTests(unittest.TestCase):
         self.assertIn("blob_account", message)
         self.assertIn("table_account", message)
 
-    @patch("ds_provider_azure_py_lib.linked_service.azure.BlobServiceClient", side_effect=Exception("boom"))
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient", side_effect=Exception("boom"))
     def test_test_connection_failure_returns_false_and_error(self, mock_blob_client_cls):
         """
         Test that test_connection returns False and error message on failure.
         Args:
             mock_blob_client_cls:
         """
-        mock_settings, _ = make_valid_settings()
+        mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
+        mock_settings.__class__ = AzureLinkedServiceSettings
+        mock_settings.account_name = "my_account"
+        mock_settings.access_key = "123"
 
         svc = AzureLinkedService(settings=mock_settings)
         ok, message = svc.test_connection()
@@ -175,7 +161,10 @@ class AzureLinkedServiceTests(unittest.TestCase):
         """
         Test that close method is a no-op and returns None.
         """
-        mock_settings, _ = make_valid_settings()
+        mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
+        mock_settings.__class__ = AzureLinkedServiceSettings
+        mock_settings.account_name = "my_account"
+        mock_settings.access_key = "123"
         svc = AzureLinkedService(settings=mock_settings)
         # close should not raise and return None
         self.assertIsNone(svc.close())

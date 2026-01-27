@@ -4,14 +4,20 @@ description: Azure provider for the DS Business Workflow
 
 linked_service:
   - name: Azure
-    kind: DS.RESOURCE.LINKED_SERVICE.AZURE
+    type: DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT
     version: 1.0.0
     description: Azure linked service
     class_name: ds_provider_azure_py_lib.linked_service.azure.AzureLinkedService
 
 dataset:
   - name: Azure
-    kind: DS.RESOURCE.DATASET.AZURE
+    type: DS.RESOURCE.DATASET.AZURE_BLOB
     version: 1.0.0
-    description: Azure dataset
-    class_name: ds_provider_azure_py_lib.dataset.azure.AzureDataset
+    description: Azure blob dataset
+    class_name: ds_provider_azure_py_lib.dataset.AzureBlob
+
+  - name: Azure
+    type: DS.RESOURCE.DATASET.AZURE_TABLE
+    version: 1.0.0
+    description: Azure table dataset
+    class_name: ds_provider_azure_py_lib.dataset.AzureTable

@@ -1,22 +1,22 @@
 """
-**File:** ``azure.py``
-**Region:** ``ds_provider_azure_py_lib/linked_service/azure``
+**File:** ``storage_account.py``
+**Region:** ``ds_provider_azure_py_lib/linked_service/storage_account``
 
 Azure Linked Service
 
 This module implements a linked service for Azure databases.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
+from azure.core.credentials import AzureNamedKeyCredential
 from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient
 from ds_resource_plugin_py_lib.common.resource.linked_service import LinkedService, LinkedServiceSettings
 
 from ..enums import ResourceType
-from .auth import AzureAuth
 
 
 @dataclass(kw_only=True)
@@ -26,7 +26,7 @@ class AzureLinkedServiceSettings(LinkedServiceSettings):
     """
 
     account_name: str
-    auth: AzureAuth = field(default_factory=AzureAuth)
+    access_key: str
 
 
 AzureLinkedServiceSettingsType = TypeVar(
@@ -44,7 +44,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     settings: AzureLinkedServiceSettingsType
     blob_service_client: BlobServiceClient | None = None
     table_service_client: TableServiceClient | None = None
-    credential: Any = None
+    credential: AzureNamedKeyCredential | None = None
 
     def __post_init__(self) -> None:
         """
@@ -53,7 +53,14 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             None
         """
         self.check_settings_is_set()
-        self.credential = self.settings.auth.get_credential(self.settings.account_name)
+
+        if not self.settings.access_key:
+            raise ValueError("Access Key is required for Azure Named Key authentication.")
+
+        self.credential = AzureNamedKeyCredential(
+            name=self.settings.account_name,
+            key=self.settings.access_key,
+        )
 
     def check_settings_is_set(self) -> None:
         """

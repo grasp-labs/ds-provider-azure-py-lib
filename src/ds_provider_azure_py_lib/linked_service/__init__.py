@@ -18,7 +18,7 @@ Example:
     >>> blob_service_client, table_service_client = aws_linked_service.connect()
 """
 
-from .azure import AzureLinkedService, AzureLinkedServiceSettings
+from .storage_account import AzureLinkedService, AzureLinkedServiceSettings
 
 __all__ = [
     "AzureLinkedService",
