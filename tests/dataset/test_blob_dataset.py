@@ -1,4 +1,15 @@
-# python
+"""
+**File:** ``test_blob_dataset.py``
+**Region:** ``tests/dataset/test_blob_dataset``
+
+Azure Blob Dataset tests.
+
+Covers:
+- Reading CSV files from Azure Blob Storage by blob name and prefix.
+- Deleting blobs by name and prefix.
+- Error handling during create, read, and delete operations.
+"""
+
 import io
 from types import SimpleNamespace
 from unittest.mock import MagicMock

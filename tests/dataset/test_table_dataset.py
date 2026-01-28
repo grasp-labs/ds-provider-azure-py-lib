@@ -1,3 +1,16 @@
+"""
+**File:** ``test_table_dataset.py``
+**Region:** ``tests/dataset/test_table_dataset``
+
+Unit tests for AzureTable dataset class.
+
+covers:
+- Validation of linked service type.
+- Content preparation and serialization.
+- Deserialization of table entities to DataFrame.
+- CRUD operations with error handling.
+"""
+
 import json
 from unittest.mock import MagicMock
 

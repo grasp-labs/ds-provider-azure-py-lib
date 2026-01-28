@@ -1,3 +1,16 @@
+"""
+**File:** ``test_linked_service.py``
+**Region:** ``tests/linked_service/test_linked_service``
+
+Unit tests for AzureLinkedService class.
+
+covers:
+- Initialization and property access.
+- Credential creation.
+- Connection methods for Blob and Table services.
+- Connection testing with success and failure scenarios.
+"""
+
 import unittest
 from unittest.mock import MagicMock, patch
 
