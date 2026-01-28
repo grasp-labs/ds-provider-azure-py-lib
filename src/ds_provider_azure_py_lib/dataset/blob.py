@@ -44,7 +44,7 @@ from azure.storage.blob import (
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
 )
-from ds_resource_plugin_py_lib.common.resource.dataset.base import BinaryDataset  # todo add to __init__.py at source
+from ds_resource_plugin_py_lib.common.resource.dataset.base import BinaryDataset
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
 from ds_resource_plugin_py_lib.common.resource.linked_service.errors import InvalidLinkedServiceTypeError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
