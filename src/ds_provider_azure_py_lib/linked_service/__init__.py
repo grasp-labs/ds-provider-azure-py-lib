@@ -4,7 +4,7 @@
 
 Azure Linked Service
 
-This module implements a linked service for Azure databases.
+This module implements a linked service for Azure storage.
 
 Example:
     >>> azure_linked_service = AzureLinkedService(settings=AzureLinkedServiceSettings(
