@@ -4,7 +4,7 @@
 
 Azure Linked Service
 
-This module implements a linked service for Azure databases.
+This module implements a linked service for Azure Storage services (Blob and Table).
 """
 
 from dataclasses import dataclass
@@ -111,17 +111,19 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
 
     def connect(self) -> tuple[BlobServiceClient, TableServiceClient]:
         """
-        Connect to Azure Storage (Blob or Table).
+        Connect to Azure Storage (Blob and Table), ensuring both service clients are initialized.
         Returns:
-            Union[BlobServiceClient, TableServiceClient]
+            tuple[BlobServiceClient, TableServiceClient]: A tuple containing the blob and table service clients.
         """
         if self.blob_service_client is None:
             self.connect_blob_service()
         if self.table_service_client is None:
             self.connect_table_service()
 
-        return self.blob_service_client, self.table_service_client  # type: ignore
+        assert self.blob_service_client is not None
+        assert self.table_service_client is not None
 
+        return self.blob_service_client, self.table_service_client
     def test_connection(self) -> tuple[bool, str]:
         """
         Test the connection to Azure Storage (Blob or Table).
