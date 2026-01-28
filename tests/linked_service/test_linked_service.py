@@ -94,9 +94,7 @@ class AzureLinkedServiceTests(unittest.TestCase):
         svc = AzureLinkedService(settings=mock_settings)
 
         # when
-        # call individual connect methods
-        svc.connect_blob_service()
-        svc.connect_table_service()
+        svc.connect()
 
         mock_blob_client_cls.assert_called_with(
             account_url=f"https://{mock_settings.account_name}.blob.core.windows.net/",

@@ -82,7 +82,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         """
         return ResourceType.STORAGE_ACCOUNT
 
-    def connect_blob_service(self) -> None:
+    def get_blob_service(self) -> BlobServiceClient:
         """
         Connect to Azure Blob StorageAccount.
         Returns:
@@ -91,12 +91,15 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         self.log.info("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
 
-        self.blob_service_client = BlobServiceClient(
+        blob_service_client = BlobServiceClient(
             account_url=account_url,
             credential=self.credential,
         )
+        if blob_service_client is None:
+            raise ConnectionError("Failed to create BlobServiceClient.")
+        return blob_service_client
 
-    def connect_table_service(self) -> None:
+    def get_table_service(self) -> TableServiceClient:
         """
         Connect to Azure Table StorageAccount.
         Returns:
@@ -104,10 +107,13 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         """
         self.log.info("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"
-        self.table_service_client = TableServiceClient(
+        table_service_client = TableServiceClient(
             endpoint=account_url,
             credential=self.credential,
         )
+        if table_service_client is None:
+            raise ConnectionError("Failed to create BlobServiceClient.")
+        return table_service_client
 
     def connect(self) -> tuple[BlobServiceClient, TableServiceClient]:
         """
@@ -116,14 +122,12 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             tuple[BlobServiceClient, TableServiceClient]: A tuple containing the blob and table service clients.
         """
         if self.blob_service_client is None:
-            self.connect_blob_service()
+            self.blob_service_client = self.get_blob_service()
         if self.table_service_client is None:
-            self.connect_table_service()
-
-        assert self.blob_service_client is not None
-        assert self.table_service_client is not None
+            self.table_service_client = self.get_table_service()
 
         return self.blob_service_client, self.table_service_client
+
     def test_connection(self) -> tuple[bool, str]:
         """
         Test the connection to Azure Storage (Blob or Table).

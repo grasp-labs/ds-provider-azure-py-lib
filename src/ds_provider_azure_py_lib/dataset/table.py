@@ -318,4 +318,4 @@ class AzureTable(
         raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
 
     def close(self) -> None:
-        pass  # todo add if needed
+        pass
