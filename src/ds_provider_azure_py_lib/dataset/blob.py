@@ -346,9 +346,12 @@ class AzureBlob(
     @staticmethod
     def concat(dfs: list[pd.DataFrame]) -> pd.DataFrame:
         """
-        list of DataFrames to concatenate.
-        :param dfs: DataFrames to concatenate.
-        :return: Concatenated DataFrame
+        concatenate a list of dataframes into a single dataframe.
+
+        Args:
+            dfs: DataFrames to concatenate.
+        Returns:
+             DataFrame: Concatenated DataFrame or empty DataFrame if input list is empty.
         """
         if not dfs:
             return pd.DataFrame()
