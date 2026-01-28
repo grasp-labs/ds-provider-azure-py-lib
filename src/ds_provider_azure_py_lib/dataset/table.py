@@ -26,7 +26,7 @@ Example:
     ...     ),
     ... )
     >>> azure_table.read()
-    >>> table_data = azure_table.content
+    >>> table_data = azure_table.content # todo change to output
 """
 
 import json
@@ -140,6 +140,7 @@ AzureLinkedServiceType = TypeVar(
     "AzureLinkedServiceType",
     bound=AzureLinkedService[Any],
 )
+# submit_transactions -> azure package
 
 
 @dataclass(kw_only=True)
@@ -179,20 +180,26 @@ class AzureTable(
         """
         return ResourceType.BLOB
 
-    def _prepare_content(self) -> dict[str, Any]:
+    def _prepare_content(self, content: pd.DataFrame) -> dict[str, Any]:
         """
         Ensure that the content is provided and is in the correct format.
         """
-        if len(self.content) != 1:
+        if not isinstance(content, pd.DataFrame):
+            raise TypeError(f"The content must be a pandas DataFrame, got {type(content)} instead.")
+
+        if len(content) == 0:
+            raise ValueError("The DataFrame is empty. Cannot prepare content for Azure Table Storage.")
+
+        if len(content) != 1:
             raise NotImplementedError("Azure Table Storage does not support batching.")
 
         required_columns = {"PartitionKey", "RowKey"}
-        if not required_columns.issubset(self.content.columns):
+        if not required_columns.issubset(content.columns):
             raise NotImplementedError(f"The DataFrame must contain the columns: {', '.join(required_columns)}")
 
         if self.serializer is None:
             raise ValueError("Serializer is not initialized.")
-        return self.serializer(self.content)
+        return self.serializer(content)
 
     def _create_table(self) -> None:
         """
@@ -225,7 +232,7 @@ class AzureTable(
         """
         Deletes entities from Azure Table Storage.
         """
-        entity = self._prepare_content()
+        entity = self._prepare_content(self.input)
 
         # Delete entity.
         table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
@@ -257,11 +264,11 @@ class AzureTable(
                 entities = table_client.list_entities()
             if self.deserializer is None:
                 raise ValueError("Deserializer is not initialized.")
-            self.content = self.deserializer(entities)
+            self.output = self.deserializer(entities)
         except HttpResponseError as exc:
             raise ReadError(f"Failed to read from Table Storage: {exc!s}") from exc
 
-        self.log.info(f"Read data from Table Storage: {len(self.content)} items")
+        self.log.info(f"Read data from Table Storage: {len(self.output)} items")
 
     def create(self, **_kwargs: Any) -> None:
         """
@@ -269,7 +276,7 @@ class AzureTable(
         TODO: Support batching.
         """
         # Ensure correct content is provided.
-        entity = self._prepare_content()
+        entity = self._prepare_content(self.input)
 
         # Create Table if not exist.
         self._create_table()
@@ -290,7 +297,7 @@ class AzureTable(
         """
         Update an entity in Azure Table Storage.
         """
-        entity = self._prepare_content()
+        entity = self._prepare_content(self.input)
 
         # Update entity.
         table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
@@ -300,6 +307,7 @@ class AzureTable(
                 entity=entity,
                 mode=UpdateMode.MERGE,
             )
+            self.output = self.input  # todo verify
         except HttpResponseError as exc:
             self.log.error(f"Failed to update entity: {exc!s}")
             raise UpdateError(f"Failed to update entity in Azure Table Storage '{self.settings.table_name}': {exc!s}") from exc

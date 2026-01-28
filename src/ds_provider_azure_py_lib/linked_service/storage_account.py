@@ -7,7 +7,10 @@ Azure Linked Service
 This module implements a linked service for Azure Storage services (Blob and Table).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from os import getenv
 from typing import Generic, TypeVar
 
 from azure.core.credentials import AzureNamedKeyCredential
@@ -63,6 +66,30 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         self.credential = AzureNamedKeyCredential(
             name=self.settings.account_name,
             key=self.settings.access_key,
+        )
+
+    @staticmethod
+    def with_environment_variables() -> AzureLinkedService[AzureLinkedServiceSettings]:
+        """
+        Method to replace settings with environment variables if they are set.
+
+        Returns:
+            AzureLinkedService: The updated settings object.
+        """
+
+        account_name = getenv("ACCOUNT_NAME")
+        access_key = getenv("ACCOUNT_KEY")
+
+        if not account_name:
+            raise AuthenticationError("ACCOUNT_NAME environment variable is required.")
+        if not access_key:
+            raise AuthenticationError("ACCOUNT_KEY environment variable is required.")
+
+        return AzureLinkedService(
+            settings=AzureLinkedServiceSettings(
+                account_name=account_name,
+                access_key=access_key,
+            )
         )
 
     def check_settings_is_set(self) -> None:

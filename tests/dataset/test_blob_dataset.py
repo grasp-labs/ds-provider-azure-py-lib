@@ -11,6 +11,7 @@ Covers:
 """
 
 import io
+import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -28,7 +29,7 @@ from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSet
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService
 
 
-class TestAzureBlobDataset:
+class TestAzureBlobDataset(unittest.TestCase):
     CSV_TEST3 = (
         "Name,HEX,RGB\n"
         'Navy,#000080,"rgb(0,0,128)"\n'
@@ -105,11 +106,11 @@ class TestAzureBlobDataset:
         )
 
         dataset.read()
-        df = dataset.content
-
         # reference CSV_TEST3 instead of hardcoded rows
         expected_df = pd.read_csv(io.StringIO(self.CSV_TEST3))
-        self._assert_dataframe_matches(df, expected_df)
+        self.assertTrue(dataset.input.empty)  # assert input is empty
+        self.assertIsNotNone(dataset.output)
+        self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_read_test2_csv_from_blob(self):
         linked_service = self._make_linked_service_mock({"test2.csv": self.CSV_TEST2.encode("utf-8")})
@@ -122,11 +123,10 @@ class TestAzureBlobDataset:
         )
 
         dataset.read()
-        df = dataset.content
 
         # reference CSV_TEST2 instead of hardcoded rows
         expected_df = pd.read_csv(io.StringIO(self.CSV_TEST2))
-        self._assert_dataframe_matches(df, expected_df)
+        self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_get_by_prefix(self):
         linked_service = self._make_linked_service_mock(
@@ -144,13 +144,12 @@ class TestAzureBlobDataset:
         )
 
         dataset.read()
-        df = dataset.content
 
         # build expected by reading the CSV_TEST variables and concatenating
         expected_df = pd.concat(
             [pd.read_csv(io.StringIO(self.CSV_TEST2)), pd.read_csv(io.StringIO(self.CSV_TEST3))], ignore_index=True
         )
-        self._assert_dataframe_matches(df, expected_df)
+        self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_delete_blob_by_name(self):
         linked_service = self._make_linked_service_mock({"test2.csv": self.CSV_TEST2.encode("utf-8")})

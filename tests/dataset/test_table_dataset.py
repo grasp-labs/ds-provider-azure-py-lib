@@ -67,14 +67,14 @@ def test_prepare_content_validations_and_serializer_json_conversion():
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
 
     # len(content) != 1 -> NotImplementedError
-    ds.content = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}, {"PartitionKey": "p", "RowKey": "2"}])
+    content_1 = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}, {"PartitionKey": "p", "RowKey": "2"}])
     with pytest.raises(NotImplementedError):
-        ds._prepare_content()
+        ds._prepare_content(content_1)
 
     # missing required columns -> NotImplementedError
-    ds.content = pd.DataFrame([{"PartitionKey": "p"}])
+    content_2 = pd.DataFrame([{"PartitionKey": "p"}])
     with pytest.raises(NotImplementedError):
-        ds._prepare_content()
+        ds._prepare_content(content_2)
 
     # serializer None -> ValueError
     ds2 = AzureTable(
@@ -82,14 +82,14 @@ def test_prepare_content_validations_and_serializer_json_conversion():
         linked_service=linked,
         serializer=None,
     )
-    ds2.content = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+    content_3 = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     with pytest.raises(ValueError):
-        ds2._prepare_content()
+        ds2._prepare_content(content_3)
 
     # successful serialization: RowKey/PartitionKey to str, dict value to JSON
     ds3 = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
-    ds3.content = pd.DataFrame([{"PartitionKey": 10, "RowKey": 5, "Payload": {"a": 1}}])
-    ent = ds3._prepare_content()
+    content_4 = pd.DataFrame([{"PartitionKey": 10, "RowKey": 5, "Payload": {"a": 1}}])
+    ent = ds3._prepare_content(content_4)
     assert ent["PartitionKey"] == "10" and ent["RowKey"] == "5"
     assert isinstance(ent["Payload"], str) and json.loads(ent["Payload"]) == {"a": 1}
 
@@ -120,7 +120,7 @@ def test_read_uses_query_filter_or_list_and_handles_errors():
     ds1 = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
     table_client.list_entities.return_value = [{"PartitionKey": "p", "RowKey": "r", "Timestamp": "t"}]
     ds1.read()
-    assert isinstance(ds1.content, pd.DataFrame)
+    assert isinstance(ds1.output, pd.DataFrame)
     table_client.list_entities.assert_called_once()
 
     # with filter -> query_entities
@@ -147,7 +147,7 @@ def test_create_success_and_errors():
 
     # success path
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
-    ds.content = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r", "v": 1}])
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r", "v": 1}])
     ds.create()
     svc.create_table.assert_called_once_with(table_name="t")
     table_client.create_entity.assert_called_once()
@@ -184,7 +184,7 @@ def test_update_success_and_error():
     linked, _ = _make_linked_service_with_table_client(table_client)
 
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
-    ds.content = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r", "v": 1}])
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r", "v": 1}])
 
     ds.update()
     table_client.upsert_entity.assert_called_once()
@@ -202,7 +202,7 @@ def test_delete_entity_and_table_paths_and_errors():
 
     # delete entity success
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
-    ds.content = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r"}])
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "r"}])
     ds.delete()
     table_client.delete_entity.assert_called_once_with(row_key="r", partition_key="p")
 
@@ -227,6 +227,21 @@ def test_delete_entity_and_table_paths_and_errors():
     svc.delete_table.side_effect = HttpResponseError("fail")
     with pytest.raises(DeleteError):
         ds2.delete()
+
+
+def test_prepare_content_raises_error_when_input_is_empty():
+    linked, _ = _make_linked_service_with_table_client(MagicMock(spec=TableClient))
+    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    with pytest.raises(ValueError):
+        ds._prepare_content(pd.DataFrame())
+
+
+def test_prepare_content_raises_typeerror_for_non_dataframe_input():
+    linked, _ = _make_linked_service_with_table_client(MagicMock(spec=TableClient))
+    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    with pytest.raises(TypeError):
+        content = [{"PartitionKey": "p", "RowKey": "r"}]
+        ds._prepare_content(content)
 
 
 def test_rename_and_close_and_type():

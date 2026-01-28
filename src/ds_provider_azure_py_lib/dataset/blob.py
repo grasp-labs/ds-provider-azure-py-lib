@@ -23,7 +23,7 @@ Example:
     ...     ),
     ... )
     >>> azure_blob.read()
-    >>> blob_data = azure_blob.content
+    >>> blob_data = azure_blob.content # todo - replace with input/untput
 """
 
 from dataclasses import dataclass, field
@@ -44,7 +44,7 @@ from azure.storage.blob import (
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
 )
-from ds_resource_plugin_py_lib.common.resource.dataset.base import BinaryDataset
+from ds_resource_plugin_py_lib.common.resource.dataset.base import TabularDataset
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
 from ds_resource_plugin_py_lib.common.resource.linked_service.errors import InvalidLinkedServiceTypeError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
@@ -61,6 +61,8 @@ class AzureBlobDatasetSettings(DatasetSettings):
 
     The `read` settings contains read-specific configuration that only
     applies to the read() operation, not to create(), delete(), update(), etc.
+    # todo prefix not to be used for create()
+    # todo explain that blob_name or the prefix must be provided, not both
     """
 
     container_name: str
@@ -80,7 +82,7 @@ AzureLinkedServiceType = TypeVar(
 
 @dataclass(kw_only=True)
 class AzureBlob(
-    BinaryDataset[
+    TabularDataset[
         AzureLinkedServiceType,
         AzureBlobDatasetSettingsType,
         PandasSerializer,
@@ -145,7 +147,7 @@ class AzureBlob(
         try:
             stream = blob_client.download_blob().readall()
         except HttpResponseError as exc:
-            self.log.error(f"Failed to read blob {blob}: {exc!s}")
+            self.log.error(f"Failed to read blob {blob}: {exc!s}")  # remove error
             raise ReadError(f"Failed to read blob {blob}: {exc!s}") from exc
 
         if stream and self.deserializer:
@@ -192,8 +194,9 @@ class AzureBlob(
         """
         Create a specific blob in the container.
 
-        :param blob: str
-        :param stream: bytes
+        Args:
+        blob: name of the blob to create.
+        stream: data stream to upload to the blob.
         Raises:
             CreateError: If the blob creation fails.
         Returns:
@@ -230,6 +233,7 @@ class AzureBlob(
         )
         try:
             blob_client.delete_blob()
+            # todo check if we can remove many blobs at once
         except HttpResponseError as exc:
             self.log.error(f"Failed to delete blob {blob}: {exc!s}")
             raise DeleteError(f"Failed to delete blob {blob}: {exc!s}") from exc
@@ -275,12 +279,12 @@ class AzureBlob(
             ReadError: If reading the blob(s) fails.
         """
         if self.settings.blob_name:
-            self.content = self._read_blob(self.settings.blob_name)
+            self.output = self._read_blob(self.settings.blob_name)
         elif self.settings.prefix:
-            self.content = self._read_blobs(self.settings.prefix)
+            self.output = self._read_blobs(self.settings.prefix)
         else:
             raise ReadError("Either blob name or prefix must be provided for reading.")
-        self.log.info(f"Read data ({len(self.content)}) items from Blob Storage ({self.settings.container_name})")
+        self.log.info(f"Read data ({len(self.output)}) items from Blob Storage ({self.settings.container_name})")
 
     def create(self, **_kwargs: Any) -> None:
         """
@@ -299,7 +303,7 @@ class AzureBlob(
         if not self.serializer:
             raise CreateError("Data serializer must be provided for creation.")
 
-        stream = self.serializer(self.content)
+        stream = self.serializer(self.input)
 
         # Create Container if not exist
         self._create_container()

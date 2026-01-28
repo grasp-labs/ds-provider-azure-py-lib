@@ -19,6 +19,7 @@ Prerequisites:
 - The `ds_provider_azure_py_lib` library should be installed and accessible in the Python environment.
 """
 
+import os
 import pandas as pd
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
@@ -39,18 +40,18 @@ def main():
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
-                account_name="...",
-                access_key="..."
+                account_name=os.environ.get("ACCOUNT_NAME"),
+                access_key=os.environ.get("ACCOUNT_KEY")
             )
         )
     )
 
     dataset.read()
-    row = dataset.content
+    row = dataset.output
     if not row.empty:
         print(row)
     else:
-        dataset.content = pd.DataFrame({
+        dataset.input = pd.DataFrame({
             "Name": ["Grays"],
             "RGB": ["rgb(128,128,128)"],
             "HEX": ["808080"],
@@ -60,11 +61,11 @@ def main():
         })
         dataset.update()
         dataset.read()
-        print(dataset.content)
+        print(dataset.output)
 
     dataset.delete()
     dataset.read()
-    print(dataset.content)
+    print(dataset.output)
 
 
 if __name__ == "__main__":

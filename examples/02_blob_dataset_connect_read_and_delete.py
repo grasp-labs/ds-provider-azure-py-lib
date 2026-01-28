@@ -14,9 +14,9 @@ Prerequisites:
 - An Azure Storage account with a container named "test-blob".
 - Blobs in the container with names starting with "test" in CSV format.
 """
+import os
 
 from ds_resource_plugin_py_lib.common.resource.dataset import DatasetStorageFormatType
-from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -29,25 +29,39 @@ def main():
         settings=AzureBlobDatasetSettings(
             container_name="test-blob",
             # blob_name="test3.csv",
-            prefix="test", # to read all blobs with this prefix (must be in .csv format for deserializer to work)
+            prefix="test",  # to read all blobs with this prefix (must be in .csv format for deserializer to work)
         ),
         serializer=PandasSerializer(format=DatasetStorageFormatType.JSON),
         deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
-                account_name="...",
-                access_key="..."
+                account_name=os.environ.get("ACCOUNT_NAME"),
+                access_key=os.environ.get("ACCOUNT_KEY")
             )
         )
     )
 
     dataset.read()
-    print(dataset.content)
+    print(dataset.output)
     dataset.delete()
     dataset.read()
-    print(dataset.content)
+    print(dataset.output)
 
+
+def main2():
+    dataset = AzureBlob(
+        settings=AzureBlobDatasetSettings(
+            container_name="test-blob",
+            # blob_name="test3.csv",
+            prefix="test",  # to read all blobs with this prefix (must be in .csv format for deserializer to work)
+        ),
+        serializer=PandasSerializer(format=DatasetStorageFormatType.JSON),
+        deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
+        linked_service=AzureLinkedService.with_environment_variables()
+    )
+    dataset.read()
+    print(dataset.output)
 
 
 if __name__ == "__main__":
-    main()
+    main2()
