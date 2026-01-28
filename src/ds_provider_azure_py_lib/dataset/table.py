@@ -20,7 +20,6 @@ from azure.core.exceptions import (
 )
 from azure.core.paging import ItemPaged
 from azure.data.tables import TableClient, TableEntity, TableServiceClient, UpdateMode
-from ds_common_logger_py_lib import LoggingMixin
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
     TabularDataset,
@@ -34,7 +33,7 @@ from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
 
 
-class AzureTableSerializer(DataSerializer, LoggingMixin):
+class AzureTableSerializer(DataSerializer):
     """
     Serialize Azure Table Storage data.
     The serializer is responsible for converting the data from
@@ -59,7 +58,7 @@ class AzureTableSerializer(DataSerializer, LoggingMixin):
         return entity
 
 
-class AzureTableDeserializer(DataDeserializer, LoggingMixin):
+class AzureTableDeserializer(DataDeserializer):
     """
     Deserialize Azure Table Storage data.
     The deserializer is responsible for converting the data from
