@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from azure.core.credentials import AzureNamedKeyCredential
+from ds_resource_plugin_py_lib.common.resource.linked_service.errors import AuthenticationError
 
 from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service.storage_account import AzureLinkedService, AzureLinkedServiceSettings
@@ -179,6 +180,18 @@ class AzureLinkedServiceTests(unittest.TestCase):
         svc = AzureLinkedService(settings=mock_settings)
         # close should not raise and return None
         self.assertIsNone(svc.close())
+
+    def test_raises_auth_error_when_no_key_provided(self):
+        """
+        Test that initializing AzureLinkedService without access_key raises AuthenticationError.
+        """
+        mock_settings = MagicMock(spec=AzureLinkedServiceSettings)
+        mock_settings.__class__ = AzureLinkedServiceSettings
+        mock_settings.account_name = "my_account"
+        mock_settings.access_key = ""  # No access key provided
+
+        with self.assertRaises(AuthenticationError):
+            AzureLinkedService(settings=mock_settings)
 
 
 if __name__ == "__main__":

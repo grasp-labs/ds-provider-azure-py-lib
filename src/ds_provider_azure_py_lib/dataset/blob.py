@@ -27,7 +27,6 @@ Example:
 """
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any, Generic, NoReturn, TypeVar
 
 import pandas as pd
@@ -106,18 +105,23 @@ class AzureBlob(
         self.client = client
 
     @property
-    def type(self) -> StrEnum:
+    def type(self) -> ResourceType:
         """
         Get the type of the dataset.
-        :return: str
+
+        Returns:
+             ResourceType
         """
         return ResourceType.BLOB
 
     def _list_blobs(self, prefix: str) -> ItemPaged[BlobProperties]:
         """
         List all blobs in the container with a specific prefix.
-        :param prefix: str
-        :return: List[BlobProperties]
+
+        Args:
+            prefix: a string prefix to match one or multiple blobs.
+        Returns:
+            ItemPaged[BlobProperties]: An iterable of BlobProperties matching the prefix.
         """
         container_client: ContainerClient = self.client.get_container_client(self.settings.container_name)
         return container_client.list_blobs(name_starts_with=prefix)
@@ -125,8 +129,11 @@ class AzureBlob(
     def _read_blob(self, blob: str) -> pd.DataFrame:
         """
         Read a specific blob in the container.
-        :param blob: str
-        :return: pd.DataFrame
+
+        Args:
+            blob: name of the blob to read.
+        Returns:
+            pd.DataFrame: content of the blob as a DataFrame.
         """
         self.log.info(f"Reading blob: {self.settings.blob_name}")
         content = pd.DataFrame()
@@ -150,8 +157,11 @@ class AzureBlob(
     def _read_blobs(self, prefix: str) -> pd.DataFrame:
         """
         Read all blobs in the container with a specific prefix.
-        :param prefix: str
-        :return: pd.DataFrame
+
+        Args:
+            prefix: a string prefix to match one or multiple blobs.
+        Returns:
+             pd.DataFrame: Content of all blobs concatenated as a DataFrame.
         """
 
         self.log.info(f"Listing blobs in with prefix: {prefix}")
@@ -162,6 +172,11 @@ class AzureBlob(
     def _create_container(self) -> None:
         """
         Create a container in the Azure Blob Storage.
+
+        Raises:
+            CreateError: If the container creation fails.
+        Returns:
+            None
         """
         container_client: ContainerClient = self.client.get_container_client(self.settings.container_name)
         try:
@@ -176,9 +191,13 @@ class AzureBlob(
     def _create_blob(self, stream: str, blob: str) -> None:
         """
         Create a specific blob in the container.
+
         :param blob: str
         :param stream: bytes
-        :return: None
+        Raises:
+            CreateError: If the blob creation fails.
+        Returns:
+            None
         """
         blob_client = self.client.get_blob_client(
             container=self.settings.container_name,
@@ -196,8 +215,13 @@ class AzureBlob(
     def _delete_blob(self, blob: str) -> pd.DataFrame:
         """
         Delete a specific blob in the container.
-        :param blob: str
-        :return: pd.DataFrame
+
+        Args:
+            blob:: name of the blob to delete.
+        Returns:
+            pd.DataFrame: Empty DataFrame upon successful deletion.
+        Raises:
+            DeleteError: If the blob deletion fails.
         """
         self.log.info(f"Deleting blob: {blob}")
         blob_client = self.client.get_blob_client(
@@ -215,8 +239,13 @@ class AzureBlob(
     def _delete_blobs(self, prefix: str) -> pd.DataFrame:
         """
         Delete all blobs in the container with a specific prefix.
-        :param prefix: str
-        :return: pd.DataFrame
+
+        Args:
+            prefix: a string prefix to match one or multiple blobs.
+        Returns:
+             pd.DataFrame: Empty DataFrame upon successful deletion of all blobs.
+        Raises:
+            DeleteError: If one or more blob deletions fail.
         """
         self.log.info(f"Listing blobs in with prefix: {prefix}")
         all_deleted = True
@@ -240,6 +269,10 @@ class AzureBlob(
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request.
+        Returns:
+            None
+        Raises:
+            ReadError: If reading the blob(s) fails.
         """
         if self.settings.blob_name:
             self.content = self._read_blob(self.settings.blob_name)
@@ -252,6 +285,12 @@ class AzureBlob(
     def create(self, **_kwargs: Any) -> None:
         """
         Create a blob in the container
+        Args:
+            _kwargs: Additional keyword arguments to pass to the request. (not used)
+        Returns:
+            None
+        Raises:
+            CreateError: If the blob creation fails.
         """
 
         if not self.settings.blob_name:
@@ -275,6 +314,13 @@ class AzureBlob(
     def delete(self, **_kwargs: Any) -> None:
         """
         Deletes a specific blob in the container.
+
+        Args:
+            _kwargs: Additional keyword arguments to pass to the request. (not used)
+        Returns:
+            None
+        Raises:
+            DeleteError: If the blob deletion fails.
         """
         if self.settings.blob_name:
             self._delete_blob(self.settings.blob_name)
@@ -289,6 +335,12 @@ class AzureBlob(
         raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
 
     def close(self) -> None:
+        """
+        No need to close the linked service. Just to comply with the interface.
+
+        Returns:
+            None
+        """
         pass
 
     @staticmethod

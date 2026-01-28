@@ -318,4 +318,5 @@ class AzureTable(
         raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
 
     def close(self) -> None:
+        """No need to close the linked service. Just to comply with the interface."""
         pass
