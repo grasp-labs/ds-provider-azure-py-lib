@@ -5,8 +5,8 @@
 Constants for Azure provider.
 
 Example:
-    >>> ResourceType.LINKED_SERVICE
-    'DS.RESOURCE.LINKED_SERVICE.AZURE'
+    >>> ResourceType.STORAGE_ACCOUNT
+    'DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT'
     >>> ResourceType.BLOB
     'DS.RESOURCE.DATASET.AZURE_BLOB'
     >>> ResourceType.TABLE
