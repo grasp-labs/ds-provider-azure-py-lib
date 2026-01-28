@@ -17,7 +17,18 @@ Example
 
 from importlib.metadata import version
 
+from .dataset import AzureBlob, AzureBlobDatasetSettings, AzureTable, AzureTableDatasetSettings
+from .linked_service import AzureLinkedService, AzureLinkedServiceSettings
+
 PACKAGE_NAME = "ds-provider-azure-py-lib"
 __version__ = version(PACKAGE_NAME)
 
-__all__ = ["__version__"]
+__all__ = [
+    "AzureBlob",
+    "AzureBlobDatasetSettings",
+    "AzureLinkedService",
+    "AzureLinkedServiceSettings",
+    "AzureTable",
+    "AzureTableDatasetSettings",
+    "__version__",
+]

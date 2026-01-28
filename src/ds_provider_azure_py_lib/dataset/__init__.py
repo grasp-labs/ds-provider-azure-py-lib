@@ -6,15 +6,7 @@ Azure Datasets: Table and Blob
 
 This module implements a datasets for Azure.
 
-Example:
-    table_name: str
-    partition_key: str | None = None
-    row_key: str | None = None
-    query_filter: str | None = None
-    delete_table: bool = False
-    >>> from ds_provider_azure_py_lib.dataset.table import AzureTableDeserializer, AzureTableSerializer
-    >>> from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
-    >>> from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
+Example (AzureTable):
     >>> azure_table = AzureTable(
     ...     deserializer=AzureTableDeserializer(),
     ...     serializer=AzureTableSerializer(),
@@ -22,28 +14,45 @@ Example:
     ...         table_name="users",
     ...         partition_key="partition_key",
     ...         row_key="row_key",
-    ...         query_filter="query_filter",
+    ...         query_filter="additional query filter",
     ...         delete_table=False,
     ...     ),
     ...     linked_service=AzureLinkedService(
     ...         settings=AzureLinkedServiceSettings(
-    ...             account_name=...,
-    ...             uri=...
+    ...             account_name="account name",
+    ...             access_key="access key"
     ...         ),
     ...     ),
     ... )
     >>> azure_table.read()
-    >>> data = azure_table.content
-"""  # todo add example for table and blob to docstring above
+    >>> table_data = azure_table.content
 
+Example (AzureBlob):
+    >>> azure_blob = AzureBlob(
+    ...     deserializer=AzureBlobDeserializer(format=DatasetStorageFormatType.CSV),
+    ...     serializer=AzureBlobSerializer(format=DatasetStorageFormatType.CSV),
+    ...     settings=AzureBlobDatasetSettings(
+    ...         container_name="my-container",
+    ...         blob_name="path/to/example_file.csv",
+    ...         prefix=None, # for multiple blobs, provide a prefix instead of blob_name
+    ...     ),
+    ...     linked_service=AzureLinkedService(
+    ...         settings=AzureLinkedServiceSettings(
+    ...             account_name="account name",
+    ...             access_key="access key"
+    ...         ),
+    ...     ),
+    ... )
+    >>> azure_blob.read()
+    >>> blob_data = azure_blob.content
+"""
+
+from .blob import AzureBlob, AzureBlobDatasetSettings
 from .table import AzureTable, AzureTableDatasetSettings
 
-# todo from .blob import AzureBlob, AzureBlobDatasetSettings
-
-
 __all__ = [
+    "AzureBlob",
+    "AzureBlobDatasetSettings",
     "AzureTable",
     "AzureTableDatasetSettings",
-    # "AzureBlob",
-    # "AzureBlobDatasetSettings",
 ]
