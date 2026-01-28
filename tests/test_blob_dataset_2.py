@@ -280,3 +280,10 @@ def test_create_success_hits_stream_container_and_upload_and_log():
     _, kwargs = blob_client.upload_blob.call_args
     assert kwargs.get("overwrite") is True
     assert "data" in kwargs and kwargs["data"] is not None
+
+
+def test_concat_empty():
+    result = AzureBlob.concat([])
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.empty

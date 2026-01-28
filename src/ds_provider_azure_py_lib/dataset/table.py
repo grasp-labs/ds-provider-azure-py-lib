@@ -6,6 +6,27 @@ Azure Dataset - Table Storage
 
 This module implements a dataset for Azure Table Storage, allowing for CRUD operations
 on table entities using pandas DataFrames for data representation.
+
+Example:
+    >>> azure_table = AzureTable(
+    ...     deserializer=AzureTableDeserializer(),
+    ...     serializer=AzureTableSerializer(),
+    ...     settings=AzureTableDatasetSettings(
+    ...         table_name="users",
+    ...         partition_key="partition_key",
+    ...         row_key="row_key",
+    ...         query_filter="additional query filter",
+    ...         delete_table=False,
+    ...     ),
+    ...     linked_service=AzureLinkedService(
+    ...         settings=AzureLinkedServiceSettings(
+    ...             account_name="account name",
+    ...             access_key="access key"
+    ...         ),
+    ...     ),
+    ... )
+    >>> azure_table.read()
+    >>> table_data = azure_table.content
 """
 
 import json

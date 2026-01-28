@@ -9,6 +9,8 @@ Example:
     'DS.RESOURCE.LINKED_SERVICE.AZURE'
     >>> ResourceType.BLOB
     'DS.RESOURCE.DATASET.AZURE_BLOB'
+    >>> ResourceType.TABLE
+    'DS.RESOURCE.DATASET.AZURE_TABLE'
 """
 
 from enum import StrEnum

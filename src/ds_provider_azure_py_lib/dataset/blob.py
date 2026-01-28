@@ -1,3 +1,31 @@
+"""
+**File:** ``blob.py``
+**Region:** ``ds_provider_azure_py_lib/dataset/blob``
+
+Azure Blob Dataset
+
+This module implements a blob ataset for azure.
+
+Example:
+    >>> azure_blob = AzureBlob(
+    ...     deserializer=AzureBlobDeserializer(format=DatasetStorageFormatType.CSV),
+    ...     serializer=AzureBlobSerializer(format=DatasetStorageFormatType.CSV),
+    ...     settings=AzureBlobDatasetSettings(
+    ...         container_name="my-container",
+    ...         blob_name="path/to/example_file.csv",
+    ...         prefix=None, # for multiple blobs, provide a prefix instead of blob_name
+    ...     ),
+    ...     linked_service=AzureLinkedService(
+    ...         settings=AzureLinkedServiceSettings(
+    ...             account_name="account name",
+    ...             access_key="access key"
+    ...         ),
+    ...     ),
+    ... )
+    >>> azure_blob.read()
+    >>> blob_data = azure_blob.content
+"""
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Generic, NoReturn, TypeVar
@@ -25,7 +53,6 @@ from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
 from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
-from ..utils import concat
 
 
 @dataclass(kw_only=True)
@@ -129,7 +156,7 @@ class AzureBlob(
 
         self.log.info(f"Listing blobs in with prefix: {prefix}")
 
-        content = concat([self._read_blob(blob.name) for blob in self._list_blobs(prefix)])
+        content = self.concat([self._read_blob(blob.name) for blob in self._list_blobs(prefix)])
         return content
 
     def _create_container(self) -> None:
@@ -204,7 +231,7 @@ class AzureBlob(
             raise DeleteError("One or more blobs failed to delete.")
 
         self.log.info("Data deleted successfully.")
-        content = concat(results)
+        content = self.concat(results)
         return content
 
     def read(self, **_kwargs: Any) -> None:
@@ -263,3 +290,14 @@ class AzureBlob(
 
     def close(self) -> None:
         pass
+
+    @staticmethod
+    def concat(dfs: list[pd.DataFrame]) -> pd.DataFrame:
+        """
+        list of DataFrames to concatenate.
+        :param dfs: DataFrames to concatenate.
+        :return: Concatenated DataFrame
+        """
+        if not dfs:
+            return pd.DataFrame()
+        return pd.concat(dfs, ignore_index=True)

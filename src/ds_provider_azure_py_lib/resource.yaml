@@ -14,10 +14,10 @@ dataset:
     type: DS.RESOURCE.DATASET.AZURE_BLOB
     version: 1.0.0
     description: Azure blob dataset
-    class_name: ds_provider_azure_py_lib.dataset.AzureBlob
+    class_name: ds_provider_azure_py_lib.dataset.blob.AzureBlob
 
   - name: Azure
     type: DS.RESOURCE.DATASET.AZURE_TABLE
     version: 1.0.0
     description: Azure table dataset
-    class_name: ds_provider_azure_py_lib.dataset.AzureTable
+    class_name: ds_provider_azure_py_lib.dataset.table.AzureTable
