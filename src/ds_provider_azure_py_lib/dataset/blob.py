@@ -59,9 +59,10 @@ class AzureBlobDatasetSettings(DatasetSettings):
     """
     Settings for Azure Blob Storage dataset operations.
 
-    Exactly one of `blob_name` or `prefix` must be provided for read/delete;
-    if specifying both- only blob_name will be considered.
-    # todo prefix not to be used for create()
+    Exactly one of `blob_name` or `prefix` must be provided for read()/delete();
+    if specifying both, only blob_name will be considered.
+
+    `prefix` is not used for create(); create() can be used only with `blob_name`.
     """
 
     container_name: str
