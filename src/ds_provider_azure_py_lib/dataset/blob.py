@@ -258,6 +258,7 @@ class AzureBlob(
             try:
                 results.append(self._delete_blob(blob.name))
             except Exception as exc:
+                all_deleted = False
                 self.log.error(f"Failed to delete blob {blob.name}: {exc!s}")
 
         if not all_deleted:

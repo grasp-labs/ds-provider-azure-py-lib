@@ -26,6 +26,7 @@ from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserialize
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
 from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings
+from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService
 
 
@@ -194,7 +195,7 @@ class TestAzureBlobDataset(unittest.TestCase):
             blob_client.delete_blob.assert_called_once()
 
 
-class TestAzureBlobDataset2:
+class TestAzureBlobDataset2(unittest.TestCase):
     @staticmethod
     def _make_base_linked_service(blob_client_mock: MagicMock | None = None) -> MagicMock:
         """
@@ -326,7 +327,7 @@ class TestAzureBlobDataset2:
         with pytest.raises(CreateError):
             ds._create_blob(b"data", blob="b")
 
-    def test__read_blob_handles_download_errors_and_empty_stream(self, monkeypatch):
+    def test__read_blob_handles_download_errors_and_empty_stream(self):
         bs_client = MagicMock(spec=BlobServiceClient)
         blob_client = MagicMock()
         blob_client.download_blob.side_effect = HttpResponseError("dl fail")
@@ -402,11 +403,9 @@ class TestAzureBlobDataset2:
 
         ds._delete_blob = fake_delete_blob
 
-        res = ds._delete_blobs("p")
+        self.assertRaises(DeleteError, ds._delete_blobs, "p")
         bs_client.get_container_client.assert_called_once_with("c")
         container_client.list_blobs.assert_called_once_with(name_starts_with="p")
-
-        assert isinstance(res, pd.DataFrame)
 
     def test_update_rename_close_behavior(self):
         linked = self._make_base_linked_service()
@@ -458,3 +457,33 @@ class TestAzureBlobDataset2:
 
         assert isinstance(result, pd.DataFrame)
         assert result.empty
+
+    def test_init_raises_type_error_for_non_azure_linked_service(self):
+        with pytest.raises(TypeError):
+            AzureBlob(
+                settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
+                serializer=PandasSerializer(format="CSV"),
+                deserializer=PandasDeserializer(format="CSV"),
+                linked_service=object(),  # not an AzureLinkedService
+            )
+
+    def test_type_property_returns_blob(self):
+        linked = self._make_base_linked_service()
+        ds = AzureBlob(
+            settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
+            serializer=PandasSerializer(format="CSV"),
+            deserializer=PandasDeserializer(format="CSV"),
+            linked_service=linked,
+        )
+        assert ds.type == ResourceType.BLOB
+
+    def test_delete_raises_when_no_blob_name_or_prefix(self):
+        linked = self._make_base_linked_service()
+        ds = AzureBlob(
+            settings=AzureBlobDatasetSettings(container_name="c"),
+            serializer=PandasSerializer(format="CSV"),
+            deserializer=PandasDeserializer(format="CSV"),
+            linked_service=linked,
+        )
+        with pytest.raises(DeleteError):
+            ds.delete()

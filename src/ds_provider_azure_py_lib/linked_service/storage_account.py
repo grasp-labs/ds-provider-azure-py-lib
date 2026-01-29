@@ -130,8 +130,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             account_url=account_url,
             credential=self.credential,
         )
-        if blob_service_client is None:
-            raise ConnectionError("Failed to create BlobServiceClient.")
+
         return blob_service_client
 
     def get_table_service(self) -> TableServiceClient:
@@ -149,8 +148,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             endpoint=account_url,
             credential=self.credential,
         )
-        if table_service_client is None:
-            raise ConnectionError("Failed to create BlobServiceClient.")
+
         return table_service_client
 
     def connect(self) -> tuple[BlobServiceClient, TableServiceClient]:
