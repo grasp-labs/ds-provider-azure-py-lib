@@ -253,6 +253,7 @@ class AzureTable(
     def _create_table(self) -> None:
         """
         Creates a table in Azure Table Storage if it does not exist.
+
         Returns:
             None
         Raises:
@@ -271,6 +272,7 @@ class AzureTable(
     def _delete_table(self) -> None:
         """
         Deletes the table from Azure Table Storage.
+
         Returns:
             None
         Raises:
@@ -352,6 +354,7 @@ class AzureTable(
     def _delete_entity(self) -> None:
         """
         Deletes entities from Azure Table Storage.
+
         Returns:
             None
         Raises:
@@ -389,8 +392,11 @@ class AzureTable(
     def read(self, **__kwargs: Any) -> None:
         """
         Read Azure Table Storage dataset.
-        :param __kwargs: dict
-        :return: List[Dict]
+
+        Args:
+            __kwargs: Additional keyword arguments
+        Returns:
+             List[Dict]
         """
         # Read entities.
         table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
@@ -412,6 +418,7 @@ class AzureTable(
     def create(self, **_kwargs: Any) -> None:
         """
         Create an entity in Azure Table Storage.
+
         Returns:
             None
         Raises:
@@ -427,6 +434,7 @@ class AzureTable(
     def update(self, **_kwargs: Any) -> None:
         """
         Update an entity in Azure Table Storage.
+
         Returns:
             None
         Raises:

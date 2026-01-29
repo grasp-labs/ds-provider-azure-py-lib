@@ -25,7 +25,7 @@ Example (AzureTable):
     ...     ),
     ... )
     >>> azure_table.read()
-    >>> table_data = azure_table.content
+    >>> table_data = azure_table.output
 
 Example (AzureBlob):
     >>> azure_blob = AzureBlob(
@@ -44,7 +44,7 @@ Example (AzureBlob):
     ...     ),
     ... )
     >>> azure_blob.read()
-    >>> blob_data = azure_blob.content
+    >>> blob_data = azure_blob.output
 """
 
 from .blob import AzureBlob, AzureBlobDatasetSettings

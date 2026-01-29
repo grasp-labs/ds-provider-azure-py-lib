@@ -23,7 +23,7 @@ Example:
     ...     ),
     ... )
     >>> azure_blob.read()
-    >>> blob_data = azure_blob.content # todo - replace with input/untput
+    >>> blob_data = azure_blob.output
 """
 
 from dataclasses import dataclass, field
@@ -59,10 +59,9 @@ class AzureBlobDatasetSettings(DatasetSettings):
     """
     Settings for Azure Blob Storage dataset operations.
 
-    The `read` settings contains read-specific configuration that only
-    applies to the read() operation, not to create(), delete(), update(), etc.
+    Exactly one of `blob_name` or `prefix` must be provided for read/delete;
+    if specifying both- only blob_name will be considered.
     # todo prefix not to be used for create()
-    # todo explain that blob_name or the prefix must be provided, not both
     """
 
     container_name: str
@@ -195,8 +194,8 @@ class AzureBlob(
         Create a specific blob in the container.
 
         Args:
-        blob: name of the blob to create.
-        stream: data stream to upload to the blob.
+            blob: name of the blob to create.
+            stream: data stream to upload to the blob.
         Raises:
             CreateError: If the blob creation fails.
         Returns:
@@ -220,7 +219,7 @@ class AzureBlob(
         Delete a specific blob in the container.
 
         Args:
-            blob:: name of the blob to delete.
+            blob: name of the blob to delete.
         Returns:
             pd.DataFrame: Empty DataFrame upon successful deletion.
         Raises:
@@ -290,6 +289,7 @@ class AzureBlob(
     def create(self, **_kwargs: Any) -> None:
         """
         Create a blob in the container
+
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
         Returns:

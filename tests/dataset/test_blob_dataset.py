@@ -439,7 +439,7 @@ class TestAzureBlobDataset2(unittest.TestCase):
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
         )
-        ds.content = pd.DataFrame({"x": [1]})
+        ds.input = pd.DataFrame({"x": [1]})
 
         ds.create()
 
