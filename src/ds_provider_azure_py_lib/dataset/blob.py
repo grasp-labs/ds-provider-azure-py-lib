@@ -147,7 +147,7 @@ class AzureBlob(
         try:
             stream = blob_client.download_blob().readall()
         except HttpResponseError as exc:
-            self.log.error(f"Failed to read blob {blob}: {exc!s}")  # remove error
+            self.log.error(f"Failed to read blob {blob}: {exc!s}")
             raise ReadError(f"Failed to read blob {blob}: {exc!s}") from exc
 
         if stream and self.deserializer:

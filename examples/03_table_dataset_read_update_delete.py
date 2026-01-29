@@ -52,17 +52,19 @@ def main():
         print(row)
     else:
         dataset.input = pd.DataFrame({
-            "Name": ["Grays"],
-            "RGB": ["rgb(128,128,128)"],
-            "HEX": ["808080"],
-            "Timestamp": ["2026-01-27T21:17:02.7102891Z"],
-            "PartitionKey": ["1"],
-            "RowKey": ["2"],
+            "Name": ["Grays", "Red"],
+            "RGB": ["rgb(128,128,128)", "rgb(255,0,0)"],
+            "HEX": ["808080", "FF0000"],
+            "Timestamp": ["2026-01-27T21:17:02.7102891Z", "2026-01-28T21:17:02.7102891Z"],
+            "PartitionKey": ["1", "1"],
+            "RowKey": ["2", "4"],
         })
         dataset.update()
         dataset.read()
         print(dataset.output)
 
+    dataset.input = dataset.output
+    print(f"kuba:  {len(dataset.input)}")
     dataset.delete()
     dataset.read()
     print(dataset.output)

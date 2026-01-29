@@ -40,7 +40,7 @@ from azure.core.exceptions import (
     ResourceNotFoundError,
 )
 from azure.core.paging import ItemPaged
-from azure.data.tables import TableClient, TableEntity, TableServiceClient, UpdateMode
+from azure.data.tables import TableClient, TableEntity, TableServiceClient, TableTransactionError, UpdateMode
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
     TabularDataset,
@@ -140,6 +140,8 @@ AzureLinkedServiceType = TypeVar(
     "AzureLinkedServiceType",
     bound=AzureLinkedService[Any],
 )
+
+
 # submit_transactions -> azure package
 
 
@@ -183,6 +185,14 @@ class AzureTable(
     def _prepare_content(self, content: pd.DataFrame) -> dict[str, Any]:
         """
         Ensure that the content is provided and is in the correct format.
+        Args:
+            content (pd.DataFrame): The content to prepare.
+        Returns:
+            dict: The prepared content.
+        Raises:
+            TypeError: If the content is not a pandas DataFrame.
+            ValueError: If the DataFrame is empty.
+            NotImplementedError: If required columns are missing.
         """
         if not isinstance(content, pd.DataFrame):
             raise TypeError(f"The content must be a pandas DataFrame, got {type(content)} instead.")
@@ -190,8 +200,8 @@ class AzureTable(
         if len(content) == 0:
             raise ValueError("The DataFrame is empty. Cannot prepare content for Azure Table Storage.")
 
-        if len(content) != 1:
-            raise NotImplementedError("Azure Table Storage does not support batching.")
+        if len(content) > 1:
+            self.log.warning("Are you sure you want to process multiple rows?")
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(content.columns):
@@ -204,7 +214,10 @@ class AzureTable(
     def _create_table(self) -> None:
         """
         Creates a table in Azure Table Storage if it does not exist.
-        :return: bool
+        Returns:
+            None
+        Raises:
+            CreateError: If the table could not be created.
         """
         try:
             self.client.create_table(
@@ -219,6 +232,10 @@ class AzureTable(
     def _delete_table(self) -> None:
         """
         Deletes the table from Azure Table Storage.
+        Returns:
+            None
+        Raises:
+            DeleteError: If the table could not be deleted.
         """
         self.log.info(f"Deleting table: {self.settings.table_name}.")
         try:
@@ -231,6 +248,10 @@ class AzureTable(
     def _delete_entity(self) -> None:
         """
         Deletes entities from Azure Table Storage.
+        Returns:
+            None
+        Raises:
+            DeleteError: If the entity could not be deleted.
         """
         entity = self._prepare_content(self.input)
 
@@ -273,15 +294,85 @@ class AzureTable(
     def create(self, **_kwargs: Any) -> None:
         """
         Create an entity in Azure Table Storage.
-        TODO: Support batching.
+        Returns:
+            None
+        Raises:
+            CreateError: If the entity could not be created.
         """
-        # Ensure correct content is provided.
+        if len(self.input) > 1:
+            self._create_many()
+        elif len(self.input) == 1:
+            self._create_one()
+        else:
+            raise CreateError("Input DataFrame is empty. Cannot create entity in Azure Table Storage.")
+
+    def update(self, **_kwargs: Any) -> None:
+        """
+        Update an entity in Azure Table Storage.
+        Returns:
+            None
+        Raises:
+            UpdateError: If the entity could not be updated.
+        """
+        if len(self.input) > 1:
+            self._update_many()
+        elif len(self.input) == 1:
+            self._update_one()
+        else:
+            raise UpdateError("Input DataFrame is empty. Cannot update entity in Azure Table Storage.")
+
+    def delete(self, **_kwargs: Any) -> None:
+        """
+        Delete an entity or table in Azure Table Storage.
+        """
+        if self.settings.delete_table:
+            self._delete_table()
+        elif len(self.input) > 1:
+            self._delete_entities()
+        elif len(self.input) == 1:
+            self._delete_entity()
+        else:
+            raise CreateError("Input DataFrame is empty. Cannot create entity in Azure Table Storage.")
+
+    def rename(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
+
+    def close(self) -> None:
+        """No need to close the linked service. Just to comply with the interface."""
+        pass
+
+    def _create_many(self) -> None:
+        transaction = []
+
+        for _, row in self.input.iterrows():
+            entity_df = pd.DataFrame([row])
+            entity = self._prepare_content(entity_df)
+            transaction.append(("create", entity))
+
+        # Create Table if not exist.
+        self._create_table()
+
+        table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
+        try:
+            table_client.submit_transaction(transaction)
+        except TableTransactionError as e:
+            print("There was an error with the transaction operation")
+            print(f"Error: {e}")
+
+    def _create_one(self) -> None:
+        """
+        Create an entity in Azure Table Storage.
+
+        Returns:
+            None
+        Raises:
+            CreateError: If the entity could not be created.
+        """
         entity = self._prepare_content(self.input)
 
         # Create Table if not exist.
         self._create_table()
 
-        # Create entity.
         table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
         try:
             self.log.info(f"Creating entity: {entity}")
@@ -293,13 +384,17 @@ class AzureTable(
             raise CreateError(f"Failed to create entity in Azure Table Storage '{self.settings.table_name}': {exc!s}") from exc
         self.log.info("Successfully created entity.")
 
-    def update(self, **_kwargs: Any) -> None:
+    def _update_one(self) -> None:
         """
-        Update an entity in Azure Table Storage.
+        Update single entity Azure Table Storage.
+
+        Returns:
+            None
+        Raises:
+            UpdateError: If the entity could not be updated.
         """
         entity = self._prepare_content(self.input)
 
-        # Update entity.
         table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
         try:
             self.log.info(f"Updating entity: {entity}")
@@ -307,24 +402,60 @@ class AzureTable(
                 entity=entity,
                 mode=UpdateMode.MERGE,
             )
-            self.output = self.input  # todo verify
+            self.output = self.input
         except HttpResponseError as exc:
             self.log.error(f"Failed to update entity: {exc!s}")
             raise UpdateError(f"Failed to update entity in Azure Table Storage '{self.settings.table_name}': {exc!s}") from exc
         self.log.info("Successfully updated entity.")
 
-    def delete(self, **_kwargs: Any) -> None:
+    def _update_many(self) -> None:
         """
-        Delete an entity or table in Azure Table Storage.
+        Update multiple entities in Azure Table Storage.
+
+        Returns:
+            None
+        Raises:
+            UpdateError: If the entities could not be updated.
         """
-        if self.settings.delete_table:
-            self._delete_table()
-        else:
-            self._delete_entity()
+        transaction = []
 
-    def rename(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
+        # iterate over pandas rows:
+        for _, row in self.input.iterrows():
+            entity_df = pd.DataFrame([row])
+            entity = self._prepare_content(entity_df)
+            transaction.append(("upsert", entity, {"mode": UpdateMode.REPLACE}))
 
-    def close(self) -> None:
-        """No need to close the linked service. Just to comply with the interface."""
-        pass
+        table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
+        try:
+            table_client.submit_transaction(transaction)
+            self.output = self.input
+        except TableTransactionError as e:
+            print("There was an error with the transaction operation, Error: {e}")
+            raise UpdateError(f"Failed to update entity: {e}") from e
+        self.log.info("Successfully updated entities.")
+
+    def _delete_entities(self) -> None:
+        """
+        Deletes multiple entities from Azure Table Storage.
+
+        Returns:
+            None
+        Raises:
+            DeleteError: If the entities could not be deleted.
+        """
+        transaction = []
+
+        # iterate over pandas rows:
+        for _, row in self.input.iterrows():
+            entity_df = pd.DataFrame([row])
+            entity = self._prepare_content(entity_df)
+            transaction.append(("delete", entity))
+
+        table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
+        try:
+            self.log.info(f"Deleting entities: {len(transaction)} items")
+            table_client.submit_transaction(transaction)
+        except TableTransactionError as e:
+            self.log.error(f"Failed to delete entities: {e}")
+            raise DeleteError(f"Failed to delete entities in Azure Table Storage: {e}") from e
+        self.log.info("Successfully deleted entities.")
