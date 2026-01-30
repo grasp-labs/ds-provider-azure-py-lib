@@ -7,7 +7,7 @@ linked_service:
     type: DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT
     version: 1.0.0
     description: Azure linked service
-    class_name: ds_provider_azure_py_lib.linked_service.azure.AzureLinkedService
+    class_name: ds_provider_azure_py_lib.linked_service.storage_account.AzureLinkedService
 
 dataset:
   - name: Azure
