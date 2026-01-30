@@ -332,14 +332,18 @@ class AzureBlob(
             DeleteError: If the blob deletion fails.
         """
         if self.settings.blob_name:
-            self._delete_blob(self.settings.blob_name)
+            blob_name = self.settings.blob_name
+            self._delete_blob(blob_name)
+            logger.info(f"Blob {blob_name} deleted successfully.")
         elif self.settings.prefix:
-            self._delete_blobs(self.settings.prefix)
+            prefix = self.settings.prefix
+            self._delete_blobs(prefix)
+            logger.info(
+                f"Blobs with prefix '{prefix}' deleted successfully from container "
+                f"'{self.settings.container_name}'."
+            )
         else:
             raise DeleteError("Either blob name or prefix must be provided for deletion.")
-
-        logger.info(f"Blob {self.settings.blob_name} deleted successfully.")
-
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
 
