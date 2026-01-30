@@ -185,7 +185,7 @@ class AzureTable(
         Returns:
             ResourceType
         """
-        return ResourceType.BLOB
+        return ResourceType.TABLE
 
     def _prepare_content(self, content: pd.DataFrame) -> dict[str, Any]:
         """
