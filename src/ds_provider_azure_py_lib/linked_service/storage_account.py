@@ -16,10 +16,13 @@ from typing import Generic, TypeVar
 from azure.core.credentials import AzureNamedKeyCredential
 from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient
+from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.linked_service import LinkedService, LinkedServiceSettings
 from ds_resource_plugin_py_lib.common.resource.linked_service.errors import AuthenticationError
 
 from ..enums import ResourceType
+
+logger = Logger.get_logger(__name__, package=True)
 
 
 @dataclass(kw_only=True)
@@ -123,7 +126,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Raises:
             ConnectionError: If blob service client was not created successfully.
         """
-        self.log.info("Connecting to Azure Blob StorageAccount...")
+        logger.info("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
 
         blob_service_client = BlobServiceClient(
@@ -142,7 +145,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Raises:
              ConnectionError: If table service client was not created successfully.
         """
-        self.log.info("Connecting to Azure Table StorageAccount...")
+        logger.info("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"
         table_service_client = TableServiceClient(
             endpoint=account_url,
@@ -179,7 +182,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
                 f"Connection successfully tested for ({blob_client.account_name} | {table_client.account_name}) StorageAccount.",
             )
         except Exception as exc:
-            self.log.error(f"Failed to test connection: {exc}", exc_info=True)
+            logger.error(f"Failed to test connection: {exc}", exc_info=True)
             return False, str(exc)
 
     def close(self) -> None:
