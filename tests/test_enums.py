@@ -32,7 +32,7 @@ def test_resource_type_blob_value() -> None:
 
 def test_resource_type_table_value() -> None:
     """
-    It exposes the correct blob dataset type value.
+    It exposes the correct table dataset type value.
     """
     assert ResourceType.TABLE == "DS.RESOURCE.DATASET.AZURE_TABLE"
     assert isinstance(ResourceType.TABLE, str)

@@ -67,7 +67,7 @@ class AzureLinkedServiceTests(unittest.TestCase):
         # when
         azure_linked_service = AzureLinkedService(settings=mock_settings)
         # then
-        self.assertIs(azure_linked_service.credential.named_key.key, "123")
+        self.assertEqual(azure_linked_service.credential.named_key.key, "123")
         self.assertIsInstance(azure_linked_service.credential, AzureNamedKeyCredential)
 
     @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient")
@@ -211,5 +211,3 @@ class AzureLinkedServiceTests(unittest.TestCase):
             AzureLinkedService.with_environment_variables()
 
 
-if __name__ == "__main__":
-    unittest.main()

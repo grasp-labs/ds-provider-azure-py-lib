@@ -4,7 +4,7 @@
 
 Azure Blob Dataset
 
-This module implements a blob ataset for azure.
+This module implements a blob dataset for azure.
 
 Example:
     >>> azure_blob = AzureBlob(
@@ -140,7 +140,7 @@ class AzureBlob(
         Returns:
             pd.DataFrame: content of the blob as a DataFrame.
         """
-        logger.info(f"Reading blob: {self.settings.blob_name}")
+        logger.info(f"Reading blob: {blob}")
         content = pd.DataFrame()
 
         blob_client: BlobClient = self.client.get_blob_client(
