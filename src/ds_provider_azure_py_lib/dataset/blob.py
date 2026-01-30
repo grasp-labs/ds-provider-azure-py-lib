@@ -186,7 +186,7 @@ class AzureBlob(
         container_client: ContainerClient = self.client.get_container_client(self.settings.container_name)
         try:
             container_client.create_container()
-            logger.info(f"Container {self.settings.container_name} created successfully)")
+            logger.info(f"Container {self.settings.container_name} created successfully")
         except ResourceExistsError:
             logger.warning(f"Container {self.settings.container_name} already exists")
         except HttpResponseError as exc:
