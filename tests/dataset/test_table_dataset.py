@@ -35,7 +35,17 @@ from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service.storage_account import AzureLinkedService
 
 
-def make_linked_service_with_table_client(table_client: TableClient | None = None):
+def make_linked_service_with_table_client(table_client: TableClient | None = None) -> tuple[MagicMock, MagicMock]:
+    """
+    Helper to create a mocked AzureLinkedService that returns a TableServiceClient with an optional TableClient.
+
+    Args:
+        table_client (TableClient | None): Optional TableClient to be returned by get_table_client
+            method. If None, the TableServiceClient will not have a TableClient set up.
+
+    Returns:
+        tuple: (AzureLinkedService mock, TableServiceClient mock)
+    """
     svc = MagicMock(spec=TableServiceClient)
     if table_client:
         svc.get_table_client.return_value = table_client
@@ -46,6 +56,9 @@ def make_linked_service_with_table_client(table_client: TableClient | None = Non
 
 
 def test_invalid_linked_service_type_and_wrong_client_type():
+    """
+    Test that AzureTable raises InvalidLinkedServiceTypeError for invalid linked service types.
+    """
     # Not an AzureLinkedService instance
     with pytest.raises(InvalidLinkedServiceTypeError):
         AzureTable(
@@ -63,6 +76,9 @@ def test_invalid_linked_service_type_and_wrong_client_type():
 
 
 def test_prepare_content_validations_and_serializer_json_conversion():
+    """
+    Test the _prepare_content method of AzureTable for various validations and serialization.
+    """
     linked, _ = make_linked_service_with_table_client()
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
 
@@ -90,6 +106,9 @@ def test_prepare_content_validations_and_serializer_json_conversion():
 
 
 def test_deserializer_builds_dataframe_and_uses_metadata_timestamp():
+    """
+    Test AzureTableDeserializer converts entities to DataFrame and handles Timestamp from metadata.
+    """
     # entity without Timestamp -> take from metadata
     e1 = MagicMock()
     e1_keys = ["PartitionKey", "RowKey", "Value"]
@@ -108,6 +127,9 @@ def test_deserializer_builds_dataframe_and_uses_metadata_timestamp():
 
 
 def test_read_uses_query_filter_or_list_and_handles_errors():
+    """
+    Test the read method of AzureTable uses query_filter or list_entities and handles errors.
+    """
     table_client = MagicMock(spec=TableClient)
     linked, _ = make_linked_service_with_table_client(table_client)
 
@@ -137,6 +159,9 @@ def test_read_uses_query_filter_or_list_and_handles_errors():
 
 
 def test_create_success_and_errors():
+    """
+    Test the create method of AzureTable for success and various error scenarios.
+    """
     table_client = MagicMock(spec=TableClient)
     linked, svc = make_linked_service_with_table_client(table_client)
 
@@ -175,6 +200,9 @@ def test_create_success_and_errors():
 
 
 def test_update_success_and_error():
+    """
+    Test the update method of AzureTable for success and error scenarios.
+    """
     table_client = MagicMock(spec=TableClient)
     linked, _ = make_linked_service_with_table_client(table_client)
 
@@ -192,6 +220,9 @@ def test_update_success_and_error():
 
 
 def test_delete_entity_and_table_paths_and_errors():
+    """
+    Test the delete method of AzureTable for deleting entities and tables, including error scenarios.
+    """
     table_client = MagicMock(spec=TableClient)
     linked, svc = make_linked_service_with_table_client(table_client)
 
@@ -225,6 +256,9 @@ def test_delete_entity_and_table_paths_and_errors():
 
 
 def test_prepare_content_raises_error_when_input_is_empty():
+    """
+    Test that _prepare_content raises ValueError when input DataFrame is empty.
+    """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
     with pytest.raises(ValueError):
@@ -232,6 +266,9 @@ def test_prepare_content_raises_error_when_input_is_empty():
 
 
 def test_prepare_content_raises_typeerror_for_non_dataframe_input():
+    """
+    Test that _prepare_content raises TypeError when input is not a DataFrame.
+    """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
     with pytest.raises(TypeError):
@@ -240,6 +277,9 @@ def test_prepare_content_raises_typeerror_for_non_dataframe_input():
 
 
 def test_rename_and_close_and_type():
+    """
+    Test rename raises NotImplementedError, close is no-op, and type property.
+    """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
     with pytest.raises(NotImplementedError):
@@ -249,6 +289,9 @@ def test_rename_and_close_and_type():
 
 
 def test_dataset_settings_builds_query_filter():
+    """
+    Test that AzureTableDatasetSettings builds query_filter correctly.
+    """
     settings = AzureTableDatasetSettings(
         table_name="t",
         partition_key="p",
@@ -259,6 +302,9 @@ def test_dataset_settings_builds_query_filter():
 
 
 def test_table_client_helper_and_submit_transaction():
+    """
+    Test that _get_table_client returns the TableClient and _submit_transaction invokes submit_transaction.
+    """
     table_client = MagicMock(spec=TableClient)
     linked, svc = make_linked_service_with_table_client(table_client)
     ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)

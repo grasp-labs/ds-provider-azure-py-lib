@@ -59,7 +59,7 @@ from ..linked_service.storage_account import AzureLinkedService
 logger = Logger.get_logger(__name__, package=True)
 
 
-type TransactionEntry = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], Mapping[str, Any]]
+TransactionEntry = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], Mapping[str, Any]]
 
 
 class AzureTableSerializer(DataSerializer):

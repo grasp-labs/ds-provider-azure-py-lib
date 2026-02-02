@@ -587,6 +587,7 @@ dependencies = [
     { name = "azure-storage-blob" },
     { name = "ds-common-logger-py-lib" },
     { name = "ds-resource-plugin-py-lib" },
+    { name = "pandas" },
 ]
 
 [package.optional-dependencies]
@@ -628,6 +629,7 @@ requires-dist = [
     { name = "ds-common-logger-py-lib", specifier = ">=0.1.0a5,<1.0.0" },
     { name = "ds-resource-plugin-py-lib", specifier = ">=0.1.0a5,<1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "pandas", specifier = ">=2.1.0,<3.0.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },

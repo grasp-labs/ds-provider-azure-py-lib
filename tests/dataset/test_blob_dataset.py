@@ -52,6 +52,16 @@ class TestAzureBlobDataset(unittest.TestCase):
 
     @staticmethod
     def _make_linked_service_mock(blob_bytes_map: dict) -> AzureLinkedService:
+        """
+        A helper to create a mocked AzureLinkedService with a BlobServiceClient that returns blobs
+        with the provided byte content.
+
+        Args:
+            blob_bytes_map: A dict mapping blob names to their byte content.
+        Returns:
+            A MagicMock spec AzureLinkedService with the mocked BlobServiceClient.
+
+        """
         mock_blob_service_client = MagicMock(spec=BlobServiceClient)
 
         mock_container_client = MagicMock()
@@ -97,6 +107,10 @@ class TestAzureBlobDataset(unittest.TestCase):
         pd.testing.assert_frame_equal(df.reset_index(drop=True)[["Name", "HEX", "RGB"]], expected_df[["Name", "HEX", "RGB"]])
 
     def test_read_test3_csv_from_blob(self):
+        """
+        Test reading a CSV file named 'test3.csv' from Azure Blob Storage.
+        Validates that the output DataFrame matches the expected content.
+        """
         linked_service = self._make_linked_service_mock({"test3.csv": self.CSV_TEST3.encode("utf-8")})
 
         dataset = AzureBlob(
@@ -114,6 +128,10 @@ class TestAzureBlobDataset(unittest.TestCase):
         self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_read_test2_csv_from_blob(self):
+        """
+        Test reading a CSV file named 'test2.csv' from Azure Blob Storage.
+        Validates that the output DataFrame matches the expected content.
+        """
         linked_service = self._make_linked_service_mock({"test2.csv": self.CSV_TEST2.encode("utf-8")})
 
         dataset = AzureBlob(
@@ -130,6 +148,10 @@ class TestAzureBlobDataset(unittest.TestCase):
         self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_get_by_prefix(self):
+        """
+        Test reading multiple CSV files from Azure Blob Storage using a prefix.
+        Validates that the output DataFrame matches the concatenated expected content.
+        """
         linked_service = self._make_linked_service_mock(
             {
                 "test2.csv": self.CSV_TEST2.encode("utf-8"),
@@ -153,6 +175,10 @@ class TestAzureBlobDataset(unittest.TestCase):
         self._assert_dataframe_matches(dataset.output, expected_df)
 
     def test_delete_blob_by_name(self):
+        """
+        Test deleting a single blob named 'test2.csv' from Azure Blob Storage.
+        Validates that the delete_blob method was called on the correct blob.
+        """
         linked_service = self._make_linked_service_mock({"test2.csv": self.CSV_TEST2.encode("utf-8")})
 
         dataset = AzureBlob(
@@ -169,6 +195,10 @@ class TestAzureBlobDataset(unittest.TestCase):
         blob_client.delete_blob.assert_called_once()
 
     def test_delete_blobs_by_prefix(self):
+        """
+        Test deleting multiple blobs from Azure Blob Storage using a prefix.
+        Validates that the delete_blob method was called on each blob.
+        """
         linked_service = self._make_linked_service_mock(
             {
                 "test2.csv": self.CSV_TEST2.encode("utf-8"),
@@ -211,6 +241,17 @@ class TestAzureBlobDataset2(unittest.TestCase):
 
     @staticmethod
     def _make_linked_service_with_clients(container_client=None, blob_client=None):
+        """
+        Returns a MagicMock(spec=AzureLinkedService) with .connect() -> (BlobServiceClient mock, None)
+        and .blob_service_client set to the same client mock. The BlobServiceClient mock is set up to
+        return the provided container_client and blob_client mocks when get_container_client and
+        get_blob_client are called, respectively.
+        Args:
+            container_client: Optional MagicMock to be returned by get_container_client.
+            blob_client: Optional MagicMock to be returned by get_blob_client.
+        Returns:
+            A tuple of (linked_service_mock, blob_service_client_mock).
+        """
         bs_client = MagicMock(spec=BlobServiceClient)
         if container_client:
             bs_client.get_container_client.return_value = container_client
@@ -222,6 +263,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
         return linked, bs_client
 
     def test_invalid_linked_service_client_type_raises_invalid_linked_service_type_error(self):
+        """
+        Test that initializing AzureBlob with a linked service that does not return a BlobServiceClient
+        from its connect() method raises InvalidLinkedServiceTypeError.
+        """
         linked = MagicMock(spec=AzureLinkedService)
         linked.connect.return_value = (object(), None)  # not a BlobServiceClient
 
@@ -234,6 +279,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             )
 
     def test_read_raises_when_no_blob_or_prefix_provided(self):
+        """
+        Test that calling read() on AzureBlob without blob_name or prefix in settings raises ReadError.
+        """
         linked_service = self._make_base_linked_service()
         ds = AzureBlob(
             settings=AzureBlobDatasetSettings(container_name="c"),
@@ -246,6 +294,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
             ds.read()
 
     def test_create_raises_when_no_blob_name_and_when_no_serializer(self):
+        """
+        Test that calling create() on AzureBlob without blob_name in settings or without a serializer
+        raises CreateError.
+        """
         linked = self._make_base_linked_service()
 
         ds1 = AzureBlob(
@@ -267,6 +319,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             ds2.create()
 
     def test__create_container_handles_resource_exists_and_http_error(self):
+        """
+        Test that _create_container() handles ResourceExistsError and HttpResponseError appropriately.
+        """
         container_client = MagicMock()
         container_client.create_container.return_value = None
         bs_client = MagicMock(spec=BlobServiceClient)
@@ -311,6 +366,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             ds3._create_container()
 
     def test__create_blob_raises_create_error_on_upload_failure(self):
+        """
+        Test that _create_blob() raises CreateError when upload_blob fails.
+        """
         bs_client = MagicMock(spec=BlobServiceClient)
         blob_client = MagicMock()
         blob_client.upload_blob.side_effect = HttpResponseError("upload fail")
@@ -328,6 +386,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
             ds._create_blob(b"data", blob="b")
 
     def test__read_blob_handles_download_errors_and_empty_stream(self):
+        """
+        Test that _read_blob() handles HttpResponseError during download and returns an empty DataFrame
+        when the downloaded stream is empty.
+        """
         bs_client = MagicMock(spec=BlobServiceClient)
         blob_client = MagicMock()
         blob_client.download_blob.side_effect = HttpResponseError("dl fail")
@@ -366,6 +428,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
         bad_deserializer.assert_not_called()
 
     def test__delete_blob_raises_delete_error_on_failure(self):
+        """
+        Test that _delete_blob() raises DeleteError when delete_blob fails.
+        """
         bs_client = MagicMock(spec=BlobServiceClient)
         blob_client = MagicMock()
         blob_client.delete_blob.side_effect = HttpResponseError("del fail")
@@ -383,6 +448,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
             ds._delete_blob("b")
 
     def test__delete_blobs_continues_on_individual_failure_and_uses_listing(self):
+        """
+        Test that _delete_blobs() continues deleting other blobs even if one deletion fails,
+        and that it uses blob listing to find blobs by prefix.
+        """
         bs_client = MagicMock(spec=BlobServiceClient)
         container_client = MagicMock()
         container_client.list_blobs.return_value = [SimpleNamespace(name="a"), SimpleNamespace(name="b")]
@@ -408,6 +477,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
         container_client.list_blobs.assert_called_once_with(name_starts_with="p")
 
     def test_update_rename_close_behavior(self):
+        """
+        Test rename raises NotImplementedError, close is no-op.
+        """
         linked = self._make_base_linked_service()
         ds = AzureBlob(
             settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
@@ -425,6 +497,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
         ds.close()  # no-op
 
     def test_create_success_hits_stream_container_and_upload_and_log(self):
+        """
+        Test that create() successfully creates the container and uploads the blob,
+        and that the correct methods are called with expected parameters.
+        """
         container_client = MagicMock()
         container_client.create_container.return_value = None
 
@@ -453,6 +529,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
         assert "data" in kwargs and kwargs["data"] is not None
 
     def test_concat_empty(self):
+        """
+        Test that AzureBlob.concat with an empty list returns an empty DataFrame.
+        """
         result = AzureBlob.concat([])
 
         assert isinstance(result, pd.DataFrame)
@@ -468,6 +547,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             )
 
     def test_type_property_returns_blob(self):
+        """
+        Test that the type property of AzureBlob returns ResourceType.BLOB.
+        """
         linked = self._make_base_linked_service()
         ds = AzureBlob(
             settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
@@ -478,6 +560,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
         assert ds.type == ResourceType.BLOB
 
     def test_delete_raises_when_no_blob_name_or_prefix(self):
+        """
+        Test that calling delete() on AzureBlob without blob_name or prefix in settings raises DeleteError.
+        """
         linked = self._make_base_linked_service()
         ds = AzureBlob(
             settings=AzureBlobDatasetSettings(container_name="c"),
