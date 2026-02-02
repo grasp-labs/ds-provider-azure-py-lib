@@ -285,7 +285,7 @@ def test_rename_and_close_and_type():
     with pytest.raises(NotImplementedError):
         ds.rename()
     ds.close()  # no-op
-    assert ds.type == ResourceType.BLOB
+    assert ds.type == ResourceType.TABLE
 
 
 def test_dataset_settings_builds_query_filter():
