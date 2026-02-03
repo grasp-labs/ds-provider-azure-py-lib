@@ -21,7 +21,6 @@ from azure.core.exceptions import HttpResponseError, ResourceExistsError
 from azure.storage.blob import BlobServiceClient
 from ds_resource_plugin_py_lib.common.resource.dataset import DatasetStorageFormatType
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
-from ds_resource_plugin_py_lib.common.resource.linked_service.errors import InvalidLinkedServiceTypeError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -261,22 +260,6 @@ class TestAzureBlobDataset2(unittest.TestCase):
         linked.connect.return_value = (bs_client, None)
         linked.blob_service_client = bs_client
         return linked, bs_client
-
-    def test_invalid_linked_service_client_type_raises_invalid_linked_service_type_error(self):
-        """
-        Test that initializing AzureBlob with a linked service that does not return a BlobServiceClient
-        from its connect() method raises InvalidLinkedServiceTypeError.
-        """
-        linked = MagicMock(spec=AzureLinkedService)
-        linked.connect.return_value = (object(), None)  # not a BlobServiceClient
-
-        with pytest.raises(InvalidLinkedServiceTypeError):
-            AzureBlob(
-                settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
-                serializer=PandasSerializer(format="CSV"),
-                deserializer=PandasDeserializer(format="CSV"),
-                linked_service=linked,
-            )
 
     def test_read_raises_when_no_blob_or_prefix_provided(self):
         """
@@ -537,15 +520,6 @@ class TestAzureBlobDataset2(unittest.TestCase):
         assert isinstance(result, pd.DataFrame)
         assert result.empty
 
-    def test_init_raises_type_error_for_non_azure_linked_service(self):
-        with pytest.raises(TypeError):
-            AzureBlob(
-                settings=AzureBlobDatasetSettings(container_name="c", blob_name="b"),
-                serializer=PandasSerializer(format="CSV"),
-                deserializer=PandasDeserializer(format="CSV"),
-                linked_service=object(),  # not an AzureLinkedService
-            )
-
     def test_type_property_returns_blob(self):
         """
         Test that the type property of AzureBlob returns ResourceType.BLOB.
@@ -572,3 +546,24 @@ class TestAzureBlobDataset2(unittest.TestCase):
         )
         with pytest.raises(DeleteError):
             ds.delete()
+
+    def test_get_details(self):
+        """
+        Test that get_details() returns correct dataset metadata.
+        """
+        linked = self._make_base_linked_service()
+        ds = AzureBlob(
+            settings=AzureBlobDatasetSettings(container_name="c", blob_name="b", prefix=None),
+            serializer=PandasSerializer(format="CSV"),
+            deserializer=PandasDeserializer(format="CSV"),
+            linked_service=linked,
+        )
+
+        details = ds.get_details()
+
+        assert details == {
+            "type": ResourceType.BLOB.value,
+            "container_name": "c",
+            "blob_name": "b",
+            "prefix": None,
+        }

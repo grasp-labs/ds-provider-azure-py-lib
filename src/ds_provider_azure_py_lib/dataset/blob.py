@@ -158,7 +158,6 @@ class AzureBlob(
         Returns:
              pd.DataFrame: Content of all blobs concatenated as a DataFrame.
         """
-
         logger.debug(f"Listing blobs in with prefix: {prefix}")
 
         content = self.concat([self._read_blob(blob.name) for blob in self._list_blobs(prefix)])

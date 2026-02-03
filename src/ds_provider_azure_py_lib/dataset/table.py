@@ -366,7 +366,7 @@ class AzureTable(
         Raises:
             CreateError: If the entity could not be created.
         """
-        if len(self.input) < 0:
+        if len(self.input) == 0:
             raise CreateError(
                 "Input DataFrame is empty. Cannot create entity in Azure Table Storage.",
                 status_code=400,
