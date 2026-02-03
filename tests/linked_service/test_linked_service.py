@@ -11,7 +11,6 @@ covers:
 - Connection testing with success and failure scenarios.
 """
 
-import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -193,21 +192,3 @@ class AzureLinkedServiceTests(unittest.TestCase):
 
         with self.assertRaises(AuthenticationError):
             AzureLinkedService(settings=mock_settings)
-
-    @patch.dict(os.environ, {"ACCOUNT_NAME": "env_account", "ACCOUNT_KEY": "env_key"})
-    def test_with_environment_variables_creates_service(self):
-        svc = AzureLinkedService.with_environment_variables()
-        self.assertEqual(svc.settings.account_name, "env_account")
-        self.assertEqual(svc.settings.access_key, "env_key")
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_with_environment_variables_missing_vars_raises(self):
-        with self.assertRaises(AuthenticationError):
-            AzureLinkedService.with_environment_variables()
-
-    @patch.dict(os.environ, {"ACCOUNT_NAME": "env_account"})
-    def test_with_environment_variables_missing_account_name_var_raises(self):
-        with self.assertRaises(AuthenticationError):
-            AzureLinkedService.with_environment_variables()
-
-

@@ -10,7 +10,6 @@ This module implements a linked service for Azure Storage services (Blob and Tab
 from __future__ import annotations
 
 from dataclasses import dataclass
-from os import getenv
 from typing import Generic, TypeVar
 
 from azure.core.credentials import AzureNamedKeyCredential
@@ -48,52 +47,9 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     """
 
     settings: AzureLinkedServiceSettingsType
-    blob_service_client: BlobServiceClient | None = None
-    table_service_client: TableServiceClient | None = None
-    credential: AzureNamedKeyCredential | None = None
-
-    def __post_init__(self) -> None:
-        """
-        Post-initialization to set up the credential.
-
-        Returns:
-            None
-        Raises:
-            AuthenticationError: If access_key is not provided.
-        """
-        self.check_settings_is_set()
-
-        if not self.settings.access_key:
-            raise AuthenticationError("Access Key is required for Azure Named Key authentication.")
-
-        self.credential = AzureNamedKeyCredential(
-            name=self.settings.account_name,
-            key=self.settings.access_key,
-        )
-
-    @staticmethod
-    def with_environment_variables() -> AzureLinkedService[AzureLinkedServiceSettings]:
-        """
-        Method to replace settings with environment variables if they are set.
-
-        Returns:
-            AzureLinkedService: The updated settings object.
-        """
-
-        account_name = getenv("ACCOUNT_NAME")
-        access_key = getenv("ACCOUNT_KEY")
-
-        if not account_name:
-            raise AuthenticationError("ACCOUNT_NAME environment variable is required.")
-        if not access_key:
-            raise AuthenticationError("ACCOUNT_KEY environment variable is required.")
-
-        return AzureLinkedService(
-            settings=AzureLinkedServiceSettings(
-                account_name=account_name,
-                access_key=access_key,
-            )
-        )
+    _blob_service_client: BlobServiceClient | None = None
+    _table_service_client: TableServiceClient | None = None
+    _credential: AzureNamedKeyCredential | None = None
 
     def check_settings_is_set(self) -> None:
         """
@@ -107,6 +63,11 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         if not isinstance(self.settings, AzureLinkedServiceSettings):
             raise AttributeError("settings not set.")
 
+        if not self.settings.access_key:
+            raise AuthenticationError("Access Key is required for Azure Named Key authentication.")
+        if not self.settings.account_name:
+            raise AuthenticationError("Account Name is required for Azure Named Key authentication.")
+
     @property
     def type(self) -> ResourceType:
         """
@@ -117,6 +78,34 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         """
         return ResourceType.STORAGE_ACCOUNT
 
+    @property
+    def blob_service_client(self) -> BlobServiceClient:
+        """
+        Get the BlobServiceClient instance.
+
+        Returns:
+            BlobServiceClient
+        Raises:
+            ConnectionError: If blob service client is not connected.
+        """
+        if not self._blob_service_client:
+            raise ConnectionError("Blob service client is not connected. Call connect() first.")
+        return self._blob_service_client
+
+    @property
+    def table_service_client(self) -> TableServiceClient:
+        """
+        Get the TableServiceClient instance.
+
+        Returns:
+            TableServiceClient
+        Raises:
+            ConnectionError: If table service client is not connected.
+        """
+        if not self._table_service_client:
+            raise ConnectionError("Table service client is not connected. Call connect() first.")
+        return self._table_service_client
+
     def get_blob_service(self) -> BlobServiceClient:
         """
         Connect to Azure Blob StorageAccount.
@@ -126,15 +115,13 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Raises:
             ConnectionError: If blob service client was not created successfully.
         """
-        logger.info("Connecting to Azure Blob StorageAccount...")
+        logger.debug("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
 
-        blob_service_client = BlobServiceClient(
+        return BlobServiceClient(
             account_url=account_url,
-            credential=self.credential,
+            credential=self._credential,
         )
-
-        return blob_service_client
 
     def get_table_service(self) -> TableServiceClient:
         """
@@ -145,28 +132,29 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Raises:
              ConnectionError: If table service client was not created successfully.
         """
-        logger.info("Connecting to Azure Table StorageAccount...")
+        logger.debug("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"
-        table_service_client = TableServiceClient(
+
+        return TableServiceClient(
             endpoint=account_url,
-            credential=self.credential,
+            credential=self._credential,
         )
 
-        return table_service_client
-
-    def connect(self) -> tuple[BlobServiceClient, TableServiceClient]:
+    def connect(self) -> None:
         """
         Connect to Azure Storage (Blob and Table), ensuring both service clients are initialized.
 
         Returns:
-            tuple[BlobServiceClient, TableServiceClient]: A tuple containing the blob and table service clients.
+            None
         """
-        if self.blob_service_client is None:
-            self.blob_service_client = self.get_blob_service()
-        if self.table_service_client is None:
-            self.table_service_client = self.get_table_service()
-
-        return self.blob_service_client, self.table_service_client
+        self.check_settings_is_set()
+        self._credential = AzureNamedKeyCredential(
+            name=self.settings.account_name,
+            key=self.settings.access_key,
+        )
+        self._blob_service_client = self.get_blob_service()
+        self._table_service_client = self.get_table_service()
+        logger.debug("Connected to Azure StorageAccount.")
 
     def test_connection(self) -> tuple[bool, str]:
         """
@@ -176,11 +164,12 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             tuple[bool, str]
         """
         try:
-            blob_client, table_client = self.connect()
-            return (
-                True,
-                f"Connection successfully tested for ({blob_client.account_name} | {table_client.account_name}) StorageAccount.",
-            )
+            if not self._blob_service_client or not self._table_service_client:
+                self.connect()
+            _ = self.blob_service_client.list_containers()
+            _ = self.table_service_client.list_tables()
+            logger.debug("Tested connection to Azure StorageAccount successfully.")
+            return True, "Connection successful."
         except Exception as exc:
             logger.error(f"Failed to test connection: {exc}", exc_info=True)
             return False, str(exc)

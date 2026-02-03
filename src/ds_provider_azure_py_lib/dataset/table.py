@@ -39,17 +39,21 @@ import pandas as pd
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
-    ResourceNotFoundError,
 )
 from azure.core.paging import ItemPaged
-from azure.data.tables import TableClient, TableEntity, TableServiceClient, TableTransactionError, UpdateMode
+from azure.data.tables import TableClient, TableEntity, TableTransactionError, UpdateMode
 from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
     TabularDataset,
 )
-from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError, UpdateError
-from ds_resource_plugin_py_lib.common.resource.linked_service.errors import InvalidLinkedServiceTypeError
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
+    CreateError,
+    DatasetException,
+    DeleteError,
+    ReadError,
+    UpdateError,
+)
 from ds_resource_plugin_py_lib.common.serde.deserialize import DataDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import DataSerializer
 
@@ -57,7 +61,6 @@ from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
 
 logger = Logger.get_logger(__name__, package=True)
-
 
 TransactionEntry = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], Mapping[str, Any]]
 
@@ -114,6 +117,40 @@ class AzureTableDeserializer(DataDeserializer):
 
 
 @dataclass(kw_only=True)
+class ReadSettings:
+    """
+    Settings specific to the read() operation.
+
+    These settings only apply when reading data from the database
+    and do not affect create(), delete(), update(), or rename() operations.
+    """
+
+    query_filter: str | None = None
+    """
+    An OData filter string to filter the entities returned by the read() operation.
+    If None, no filter is applied and all entities are returned.
+
+    Example: "PartitionKey eq '{self.partition_key}' and RowKey eq '{self.row_key}'"
+    """
+
+
+@dataclass(kw_only=True)
+class DeleteSettings:
+    """
+    Settings specific to the delete() operation.
+
+    These settings only apply when deleting data from the database
+    and do not affect create(), read(), update(), or rename() operations.
+    """
+
+    delete_table: bool = False
+    """
+    If True, the entire table will be deleted when delete() is called.
+    If False, only the entities specified in the input will be deleted.
+    """
+
+
+@dataclass(kw_only=True)
 class AzureTableDatasetSettings(DatasetSettings):
     """
     Settings for Azure Table Storage dataset operations.
@@ -123,21 +160,19 @@ class AzureTableDatasetSettings(DatasetSettings):
     """
 
     table_name: str
-    partition_key: str | None = None
-    row_key: str | None = None
-    query_filter: str | None = None
-    delete_table: bool = False
 
-    def __post_init__(self) -> None:
-        filters = []
-        if self.partition_key:
-            filters.append(f"PartitionKey eq '{self.partition_key}'")
-        if self.row_key:
-            filters.append(f"RowKey eq '{self.row_key}'")
-        if self.query_filter:
-            filters.append(self.query_filter)
+    delete: DeleteSettings | None = None
+    """
+    Delete-specific settings. Only applies to the read() operation.
 
-        self.query_filter = " and ".join(filters) if filters else None
+    If None, read() will use default behavior (No table removed on delete, just entity).
+    """
+    read: ReadSettings | None = None
+    """
+    Read-specific settings. Only applies to the read() operation.
+
+    If None, read() will use read without filter.
+    """
 
 
 AzureTableDatasetSettingsType = TypeVar(
@@ -162,7 +197,6 @@ class AzureTable(
 ):
     linked_service: AzureLinkedServiceType
     settings: AzureTableDatasetSettingsType
-    client: TableServiceClient = field(init=False)
 
     serializer: AzureTableSerializer | None = field(
         default_factory=lambda: AzureTableSerializer(),
@@ -170,13 +204,6 @@ class AzureTable(
     deserializer: AzureTableDeserializer | None = field(
         default_factory=lambda: AzureTableDeserializer(),
     )
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.linked_service, AzureLinkedService):
-            raise InvalidLinkedServiceTypeError("Linked service must be of type Azure Storage to be used in Table Dataset.")
-        _, self.client = self.linked_service.connect()
-        if not isinstance(self.client, TableServiceClient):
-            raise InvalidLinkedServiceTypeError("Linked Service must use service 'table' to be used in Table Dataset.")
 
     @property
     def type(self) -> ResourceType:
@@ -200,27 +227,29 @@ class AzureTable(
             NotImplementedError: If required columns are missing.
         """
         if not isinstance(content, pd.DataFrame):
-            raise TypeError(f"The content must be a pandas DataFrame, got {type(content)} instead.")
+            raise DatasetException(f"The content must be a pandas DataFrame, got {type(content)} instead.", status_code=400)
 
         if len(content) == 0:
-            raise ValueError("The DataFrame is empty. Cannot prepare content for Azure Table Storage.")
+            raise DatasetException("The DataFrame is empty. Cannot prepare content for Azure Table Storage.", status_code=400)
 
         if len(content) > 1:
             logger.warning("Are you sure you want to process multiple rows?")
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(content.columns):
-            raise NotImplementedError(f"The DataFrame must contain the columns: {', '.join(required_columns)}")
+            raise DatasetException(f"The DataFrame must contain the columns: {', '.join(required_columns)}", status_code=400)
 
         if self.serializer is None:
-            raise ValueError("Serializer is not initialized.")
+            raise DatasetException("Serializer is not initialized.", status_code=400)
         return self.serializer(content)
 
     def _get_table_client(self) -> TableClient:
         """
         Return a TableClient for the currently configured table.
+        Returns:
+            TableClient
         """
-        return self.client.get_table_client(table_name=self.settings.table_name)
+        return self.linked_service.table_service_client.get_table_client(table_name=self.settings.table_name)
 
     def _build_transaction_from_input(self, operation: str, params: Mapping[str, Any] | None = None) -> list[TransactionEntry]:
         """
@@ -232,16 +261,24 @@ class AzureTable(
         transaction: list[TransactionEntry] = []
         for _, row in self.input.iterrows():
             entity_df = pd.DataFrame([row])
-            entity: dict[str, Any] = self._prepare_content(entity_df)
+            try:
+                entity: dict[str, Any] = self._prepare_content(entity_df)
+            except DatasetException as exc:
+                if operation == "create":
+                    raise CreateError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
+                elif operation == "upsert":
+                    raise UpdateError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
+                elif operation == "delete":
+                    raise DeleteError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
+                else:
+                    raise DatasetException(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
             if params is not None:
                 transaction.append((operation, entity, params))
             else:
                 transaction.append((operation, entity))
         return transaction
 
-    def _submit_transaction(
-        self, transaction: Iterable[TransactionEntry], error_cls: builtins.type[Exception], action: str
-    ) -> None:
+    def _submit_transaction(self, transaction: Iterable[TransactionEntry], error_cls: builtins.type[DatasetException]) -> None:
         """
         Submit transaction and map TableTransactionError to provided error_type.
         """
@@ -250,9 +287,12 @@ class AzureTable(
             if not transaction:
                 return
             table_client.submit_transaction(transaction)
-        except TableTransactionError as exc:
-            logger.error(f"Failed to {action}: {exc}")
-            raise error_cls(f"Failed to {action} in Azure Table Storage '{self.settings.table_name}': {exc}") from exc
+        except (TableTransactionError, HttpResponseError) as exc:
+            logger.error(f"{error_cls.__class__.__name__}: {exc.message}")
+            if exc.status_code:
+                raise error_cls(message=exc.message, status_code=exc.status_code, details=self.get_details()) from exc
+            else:
+                raise error_cls(message=exc.message, details=self.get_details()) from exc
 
     def _create_table(self) -> None:
         """
@@ -264,12 +304,12 @@ class AzureTable(
             CreateError: If the table could not be created.
         """
         try:
-            self.client.create_table(
+            self.linked_service.table_service_client.create_table(
                 table_name=self.settings.table_name,
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
         except ResourceExistsError:
-            return
+            logger.debug(f"Table ({self.settings.table_name}) already exists.")
         except HttpResponseError as exc:
             raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}") from exc
 
@@ -282,116 +322,15 @@ class AzureTable(
         Raises:
             DeleteError: If the table could not be deleted.
         """
-        logger.info(f"Deleting table: {self.settings.table_name}.")
+        logger.debug(f"Deleting table: {self.settings.table_name}.")
         try:
-            self.client.delete_table(table_name=self.settings.table_name)
+            self.linked_service.table_service_client.delete_table(table_name=self.settings.table_name)
         except HttpResponseError as exc:
             logger.error(f"Failed to delete Table ({self.settings.table_name})")
-            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}") from exc
+            raise DeleteError(
+                f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()
+            ) from exc  # todo change status_code, add details
         logger.info(f"Successfully deleted table:{self.settings.table_name}.")
-
-    def _create_many(self) -> None:
-        # Create Table if not exist.
-        self._create_table()
-        transaction = self._build_transaction_from_input("create")
-        # errors mapped to CreateError
-        self._submit_transaction(transaction, CreateError, "create entities")
-
-    def _create_one(self) -> None:
-        """
-        Create an entity in Azure Table Storage.
-
-        Returns:
-            None
-        Raises:
-            CreateError: If the entity could not be created.
-        """
-        entity = self._prepare_content(self.input)
-        # Create Table if not exist.
-        self._create_table()
-        table_client = self._get_table_client()
-        try:
-            logger.info(f"Creating entity: {entity}")
-            table_client.create_entity(entity=entity)
-        except ResourceExistsError as exc:
-            logger.warning(f"Entity already exists: {exc!s}")
-        except HttpResponseError as exc:
-            logger.error(f"Failed to create entity: {exc!s}")
-            raise CreateError(f"Failed to create entity in Azure Table Storage '{self.settings.table_name}': {exc!s}") from exc
-        logger.info("Successfully created entity.")
-
-    def _update_one(self) -> None:
-        """
-        Update single entity Azure Table Storage.
-
-        Returns:
-            None
-        Raises:
-            UpdateError: If the entity could not be updated.
-        """
-        entity = self._prepare_content(self.input)
-
-        table_client = self._get_table_client()
-        try:
-            logger.info(f"Updating entity: {entity}")
-            table_client.upsert_entity(entity=entity, mode=UpdateMode.MERGE)
-            self.output = self.input
-        except HttpResponseError as exc:
-            logger.error(f"Failed to update entity: {exc!s}")
-            raise UpdateError(f"Failed to update entity in Azure Table Storage '{self.settings.table_name}': {exc!s}") from exc
-        logger.info("Successfully updated entity.")
-
-    def _update_many(self) -> None:
-        """
-        Update multiple entities in Azure Table Storage.
-
-        Returns:
-            None
-        Raises:
-            UpdateError: If the entities could not be updated.
-        """
-        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
-        self._submit_transaction(transaction, UpdateError, "update entities")
-        self.output = self.input
-        logger.info("Successfully updated entities.")
-
-    def _delete_entity(self) -> None:
-        """
-        Deletes entities from Azure Table Storage.
-
-        Returns:
-            None
-        Raises:
-            DeleteError: If the entity could not be deleted.
-        """
-        entity = self._prepare_content(self.input)
-
-        # Delete entity.
-        table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
-        try:
-            logger.info(f"Deleting entity: {entity}")
-            table_client.delete_entity(
-                row_key=entity["RowKey"],
-                partition_key=entity["PartitionKey"],
-            )
-        except (ResourceNotFoundError, HttpResponseError) as exc:
-            logger.error(f"Failed to delete entity: {exc!s}")
-            raise DeleteError(f"Failed to delete entity in Azure Table Storage: {exc!s}") from exc
-        logger.info("Successfully deleted entity.")
-
-    def _delete_entities(self) -> None:
-        """
-        Deletes multiple entities from Azure Table Storage.
-
-        Returns:
-            None
-        Raises:
-            DeleteError: If the entities could not be deleted.
-        """
-        transaction = self._build_transaction_from_input("delete")
-        logger.info(f"Deleting entities: {len(transaction)} items")
-        self._submit_transaction(transaction, DeleteError, "delete entities")
-        logger.info("Successfully deleted entities.")
 
     def read(self, **__kwargs: Any) -> None:
         """
@@ -402,22 +341,21 @@ class AzureTable(
         Returns:
              List[Dict]
         """
-        # Read entities.
-        table_client: TableClient = self.client.get_table_client(table_name=self.settings.table_name)
+        table_client: TableClient = self.linked_service.table_service_client.get_table_client(table_name=self.settings.table_name)
         try:
-            if self.settings.query_filter:
+            if self.settings.read and self.settings.read.query_filter:
                 entities = table_client.query_entities(
-                    query_filter=self.settings.query_filter,
+                    query_filter=self.settings.read.query_filter,
                 )
             else:
                 entities = table_client.list_entities()
             if self.deserializer is None:
-                raise ValueError("Deserializer is not initialized.")
+                raise ValueError("Deserializer is not initialized.")  # todo different error
             self.output = self.deserializer(entities)
         except HttpResponseError as exc:
-            raise ReadError(f"Failed to read from Table Storage: {exc!s}") from exc
+            raise ReadError(f"Failed to read from Table Storage: {exc!s}") from exc  # todo change status_code, add details
 
-        logger.info(f"Read data from Table Storage: {len(self.output)} items")
+        logger.debug(f"Read data from Table Storage: {len(self.output)} items")
 
     def create(self, **_kwargs: Any) -> None:
         """
@@ -428,12 +366,26 @@ class AzureTable(
         Raises:
             CreateError: If the entity could not be created.
         """
-        if len(self.input) > 1:
-            self._create_many()
-        elif len(self.input) == 1:
-            self._create_one()
-        else:
-            raise CreateError("Input DataFrame is empty. Cannot create entity in Azure Table Storage.")
+        if len(self.input) < 0:
+            raise CreateError(
+                "Input DataFrame is empty. Cannot create entity in Azure Table Storage.",
+                status_code=400,
+                details=self.get_details(),
+            )
+
+        self._create_table()
+        transaction = self._build_transaction_from_input("create")
+        try:
+            self._submit_transaction(transaction, CreateError)
+        except TableTransactionError as exc:
+            if exc.status_code:
+                raise CreateError(message=exc.message, status_code=exc.status_code, details=self.get_details()) from exc
+            else:
+                raise CreateError(message=exc.message) from exc
+            pass
+        except HttpResponseError:
+            pass
+        self.output = self.input
 
     def update(self, **_kwargs: Any) -> None:
         """
@@ -444,25 +396,33 @@ class AzureTable(
         Raises:
             UpdateError: If the entity could not be updated.
         """
-        if len(self.input) > 1:
-            self._update_many()
-        elif len(self.input) == 1:
-            self._update_one()
-        else:
-            raise UpdateError("Input DataFrame is empty. Cannot update entity in Azure Table Storage.")
+        if len(self.input) == 0:
+            raise UpdateError(
+                "Input DataFrame is empty. Cannot update entity in Azure Table Storage."
+            )  # todo change status_code, add details
+
+        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
+        self._submit_transaction(transaction, UpdateError)
+        self.output = self.input
+        logger.info("Successfully updated entities.")
 
     def delete(self, **_kwargs: Any) -> None:
         """
         Delete an entity or table in Azure Table Storage.
         """
-        if self.settings.delete_table:
+        if self.settings.delete and self.settings.delete.delete_table:
             self._delete_table()
-        elif len(self.input) > 1:
-            self._delete_entities()
-        elif len(self.input) == 1:
-            self._delete_entity()
         else:
-            raise CreateError("Input DataFrame is empty. Cannot create entity in Azure Table Storage.")
+            if len(self.input) == 0:
+                raise DeleteError(
+                    "Input DataFrame is empty. Cannot delete entity in Azure Table Storage.",
+                    status_code=400,
+                    details=self.get_details(),
+                )  # todo change status_code, add details
+            transaction = self._build_transaction_from_input("delete")
+            logger.debug(f"Deleting entities: {len(transaction)} items")
+            self._submit_transaction(transaction, DeleteError)
+            logger.info("Successfully deleted entities.")
 
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
@@ -470,3 +430,25 @@ class AzureTable(
     def close(self) -> None:
         """No need to close the linked service. Just to comply with the interface."""
         pass
+
+    def get_details(self) -> dict[str, Any]:
+        """
+        Get details about the dataset.
+
+        Returns:
+            dict[str, Any]
+        """
+        details: dict[str, Any] = {
+            "table_name": self.settings.table_name,
+            "dataset_type": self.type.value,
+        }
+
+        read_settings = getattr(self.settings, "read", None)
+        if read_settings is not None and read_settings.query_filter is not None:
+            details["query_filter"] = read_settings.query_filter
+
+        delete_settings = getattr(self.settings, "delete", None)
+        if delete_settings is not None:
+            details["delete_table"] = str(delete_settings.delete_table)
+
+        return details

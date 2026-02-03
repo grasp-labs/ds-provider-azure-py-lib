@@ -23,7 +23,8 @@ import os
 import pandas as pd
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
-from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer
+from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, \
+    DeleteSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -33,10 +34,8 @@ def main():
         deserializer=AzureTableDeserializer(),
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
-            # partition_key="1", # optional for delete and read
-            # row_key="2", #  optional for delete and read
-            # query_filter="", # optional for read
-            delete_table=False  # optional for delete (if True, deletes entire table, otherwise entity only)
+            read=ReadSettings(query_filter="PartitionKey eq '1'"),
+            delete=DeleteSettings(delete_table=True),
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
@@ -45,7 +44,8 @@ def main():
             )
         )
     )
-
+    dataset.linked_service.connect()
+    dataset.create()
     dataset.read()
     row = dataset.output
     if not row.empty:
@@ -64,7 +64,7 @@ def main():
         print(dataset.output)
 
     dataset.input = dataset.output
-    print(f"kuba:  {len(dataset.input)}")
+    print(f"dataset input length:  {len(dataset.input)}")
     dataset.delete()
     dataset.read()
     print(dataset.output)

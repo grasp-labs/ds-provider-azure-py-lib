@@ -22,19 +22,20 @@ def main():
         )
     )
 
-    blob_service_client, table_service_client = linked_service.connect()
-    tables = table_service_client.list_tables()
+    linked_service.connect()
+    linked_service.test_connection()
+    tables = linked_service.table_service_client.list_tables()
 
     print("Tables:")
     for table in tables:
         print(f" -{table.name}")
 
-    containers = blob_service_client.list_containers()
+    containers = linked_service.blob_service_client.list_containers()
     print("\nContainers:")
     for container in containers:
         print(f" -{container.name}")
 
-    test_container = blob_service_client.get_container_client("test-blob")
+    test_container = linked_service.blob_service_client.get_container_client("test-blob")
     blobs = test_container.list_blobs()
     print("\nBlobs in 'test-blob' container:")
     for blob in blobs:

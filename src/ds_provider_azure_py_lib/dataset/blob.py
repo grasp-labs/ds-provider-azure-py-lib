@@ -26,7 +26,7 @@ Example:
     >>> blob_data = azure_blob.output
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Generic, NoReturn, TypeVar
 
 import pandas as pd
@@ -38,7 +38,6 @@ from azure.core.paging import ItemPaged
 from azure.storage.blob import (
     BlobClient,
     BlobProperties,
-    BlobServiceClient,
     ContainerClient,
 )
 from ds_common_logger_py_lib import Logger
@@ -47,7 +46,6 @@ from ds_resource_plugin_py_lib.common.resource.dataset import (
 )
 from ds_resource_plugin_py_lib.common.resource.dataset.base import TabularDataset
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
-from ds_resource_plugin_py_lib.common.resource.linked_service.errors import InvalidLinkedServiceTypeError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -95,19 +93,9 @@ class AzureBlob(
 ):
     linked_service: AzureLinkedServiceType
     settings: AzureBlobDatasetSettingsType
-    client: BlobServiceClient = field(init=False)
 
     serializer: PandasSerializer
     deserializer: PandasDeserializer
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.linked_service, AzureLinkedService):
-            raise TypeError(f"Expected linked_service to be of type AzureLinkedService, got {type(self.linked_service)}")
-
-        client, _ = self.linked_service.connect()
-        if not isinstance(client, BlobServiceClient):
-            raise InvalidLinkedServiceTypeError("Linked Service must use service 'blob' to be used in Azure Blob Dataset.")
-        self.client = client
 
     @property
     def type(self) -> ResourceType:
@@ -128,7 +116,9 @@ class AzureBlob(
         Returns:
             ItemPaged[BlobProperties]: An iterable of BlobProperties matching the prefix.
         """
-        container_client: ContainerClient = self.client.get_container_client(self.settings.container_name)
+        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+            self.settings.container_name
+        )
         return container_client.list_blobs(name_starts_with=prefix)
 
     def _read_blob(self, blob: str) -> pd.DataFrame:
@@ -140,10 +130,10 @@ class AzureBlob(
         Returns:
             pd.DataFrame: content of the blob as a DataFrame.
         """
-        logger.info(f"Reading blob: {blob}")
+        logger.debug(f"Reading blob: {blob}")
         content = pd.DataFrame()
 
-        blob_client: BlobClient = self.client.get_blob_client(
+        blob_client: BlobClient = self.linked_service.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -169,7 +159,7 @@ class AzureBlob(
              pd.DataFrame: Content of all blobs concatenated as a DataFrame.
         """
 
-        logger.info(f"Listing blobs in with prefix: {prefix}")
+        logger.debug(f"Listing blobs in with prefix: {prefix}")
 
         content = self.concat([self._read_blob(blob.name) for blob in self._list_blobs(prefix)])
         return content
@@ -183,7 +173,9 @@ class AzureBlob(
         Returns:
             None
         """
-        container_client: ContainerClient = self.client.get_container_client(self.settings.container_name)
+        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+            self.settings.container_name
+        )
         try:
             container_client.create_container()
             logger.info(f"Container {self.settings.container_name} created successfully")
@@ -205,7 +197,7 @@ class AzureBlob(
         Returns:
             None
         """
-        blob_client = self.client.get_blob_client(
+        blob_client = self.linked_service.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -229,8 +221,8 @@ class AzureBlob(
         Raises:
             DeleteError: If the blob deletion fails.
         """
-        logger.info(f"Deleting blob: {blob}")
-        blob_client = self.client.get_blob_client(
+        logger.debug(f"Deleting blob: {blob}")
+        blob_client = self.linked_service.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -254,7 +246,7 @@ class AzureBlob(
         Raises:
             DeleteError: If one or more blob deletions fail.
         """
-        logger.info(f"Listing blobs in with prefix: {prefix}")
+        logger.debug(f"Listing blobs in with prefix: {prefix}")
         all_deleted = True
         results = []
         for blob in self._list_blobs(prefix):
@@ -288,7 +280,7 @@ class AzureBlob(
             self.output = self._read_blobs(self.settings.prefix)
         else:
             raise ReadError("Either blob name or prefix must be provided for reading.")
-        logger.info(f"Read data ({len(self.output)}) items from Blob Storage ({self.settings.container_name})")
+        logger.debug(f"Read data ({len(self.output)}) items from Blob Storage ({self.settings.container_name})")
 
     def create(self, **_kwargs: Any) -> None:
         """
@@ -310,12 +302,11 @@ class AzureBlob(
 
         stream = self.serializer(self.input)
 
-        # Create Container if not exist
-        self._create_container()
+        self._create_container()  # if not exist
 
         self._create_blob(stream, blob=self.settings.blob_name)
 
-        logger.info(f"Blob {self.settings.blob_name} created successfully.")
+        logger.debug(f"Blob {self.settings.blob_name} created successfully.")
 
     def update(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Update operation is not supported for Azure Blob datasets")
@@ -338,12 +329,10 @@ class AzureBlob(
         elif self.settings.prefix:
             prefix = self.settings.prefix
             self._delete_blobs(prefix)
-            logger.info(
-                f"Blobs with prefix '{prefix}' deleted successfully from container "
-                f"'{self.settings.container_name}'."
-            )
+            logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
         else:
             raise DeleteError("Either blob name or prefix must be provided for deletion.")
+
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
 
@@ -369,3 +358,17 @@ class AzureBlob(
         if not dfs:
             return pd.DataFrame()
         return pd.concat(dfs, ignore_index=True)
+
+    def get_details(self) -> dict[str, Any]:
+        """
+        Get details of the dataset.
+
+        Returns:
+            Dict[str, Any]: Details of the dataset.
+        """
+        return {
+            "type": self.type.value,
+            "container_name": self.settings.container_name,
+            "blob_name": self.settings.blob_name,
+            "prefix": self.settings.prefix,
+        }

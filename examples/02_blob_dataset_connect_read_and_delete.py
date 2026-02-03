@@ -40,28 +40,16 @@ def main():
             )
         )
     )
+    dataset.linked_service.connect()
+    dataset.linked_service.test_connection()
 
     dataset.read()
     print(dataset.output)
+
     dataset.delete()
     dataset.read()
     print(dataset.output)
 
 
-def main2():
-    dataset = AzureBlob(
-        settings=AzureBlobDatasetSettings(
-            container_name="test-blob",
-            # blob_name="test3.csv",
-            prefix="test",  # to read all blobs with this prefix (must be in .csv format for deserializer to work)
-        ),
-        serializer=PandasSerializer(format=DatasetStorageFormatType.JSON),
-        deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
-        linked_service=AzureLinkedService.with_environment_variables()
-    )
-    dataset.read()
-    print(dataset.output)
-
-
 if __name__ == "__main__":
-    main2()
+    main()
