@@ -234,8 +234,8 @@ def test_delete_table_success_and_error():
 
 def test_read_uses_filter_and_handles_error():
     table_client = MagicMock()
-    table_client.query_entities.return_value = [{"PartitionKey": "p", "RowKey": "1"}]
-    table_client.list_entities.return_value = [{"PartitionKey": "p", "RowKey": "2"}]
+    table_client.query_entities.return_value = [{"PartitionKey": "p", "RowKey": "1", "Timestamp": "2024-01-01T00:00:00Z"}]
+    table_client.list_entities.return_value = [{"PartitionKey": "p", "RowKey": "2", "Timestamp": "2024-01-02T00:00:00Z"}]
     linked, _, svc = _make_linked_service_and_table_client()
     svc.get_table_client.return_value = table_client
     ds = AzureTable(
