@@ -14,19 +14,34 @@ Example:
     ...         container_name="my-container",
     ...         blob_name="path/to/example_file.csv",
     ...         prefix=None, # for multiple blobs, provide a prefix instead of blob_name
+    ...         create=CreateSettings(
+    ...            overite_blob_if_exists=True, # overwrite the blob that already exists or raise an error
+    ...            new_container=True # create a new container or raise an error
+    ...         ),
+    ...         delete=DeleteSettings(
+    ...            delete_container=True # delete the container or only delete the blob.
+    ...         ),
     ...     ),
     ...     linked_service=AzureLinkedService(
     ...         settings=AzureLinkedServiceSettings(
     ...             account_name="account name",
     ...             access_key="access key"
     ...         ),
+    ...        id=uuid.uuid4(),
+    ...        name="testazurepackage",
+    ...        version="0.0.1",
+    ...        description="testazurepackage",
     ...     ),
+    ... id=uuid.uuid4(),
+    ... name="testazurepackage",
+    ... version="0.0.1",
+    ... description="testazurepackage"
     ... )
     >>> azure_blob.read()
     >>> blob_data = azure_blob.output
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
 
 import pandas as pd
@@ -56,19 +71,42 @@ logger = Logger.get_logger(__name__, package=True)
 
 
 @dataclass(kw_only=True)
+class CreateSettings:
+    """
+    Settings for create operations.
+    """
+
+    overite_blob_if_exists: bool = True  # controls whether to overwrite an existing blob in case of name conflict
+    new_container: bool = True  # confirm creation of a new container if it does not exist already
+
+
+@dataclass(kw_only=True)
+class DeleteSettings:
+    """
+    Settings for delete operations.
+    """
+
+    delete_container: bool = False  # confirm deletion of the entire container
+
+
+@dataclass(kw_only=True)
 class AzureBlobDatasetSettings(DatasetSettings):
     """
     Settings for Azure Blob Storage dataset operations.
 
     Exactly one of `blob_name` or `prefix` must be provided for read()/delete();
-    if specifying both, only blob_name will be considered.
-
-    `prefix` is not used for create(); create() can be used only with `blob_name`.
+    if specifying both, only `blob_name` will be considered.
+    `prefix` is not used for create(); it can be called only with `blob_name`.
+    `create` by default (if not passed) will attempt to create the container if it does not exist.
+    `delete` by default (if not passed) will delete only the specified blob(s), not the entire container.
     """
 
     container_name: str
     blob_name: str | None = None
     prefix: str | None = None
+
+    create: CreateSettings = field(default_factory=lambda: CreateSettings())
+    delete: DeleteSettings = field(default_factory=lambda: DeleteSettings())
 
 
 AzureBlobDatasetSettingsType = TypeVar(
@@ -113,6 +151,7 @@ class AzureBlob(
 
         Args:
             prefix: a string prefix to match one or multiple blobs.
+
         Returns:
             ItemPaged[BlobProperties]: An iterable of BlobProperties matching the prefix.
         """
@@ -127,6 +166,7 @@ class AzureBlob(
 
         Args:
             blob: name of the blob to read.
+
         Returns:
             pd.DataFrame: content of the blob as a DataFrame.
         """
@@ -141,7 +181,7 @@ class AzureBlob(
             stream = blob_client.download_blob().readall()
         except HttpResponseError as exc:
             logger.error(f"Failed to read blob {blob}: {exc!s}")
-            raise ReadError(f"Failed to read blob {blob}: {exc!s}") from exc
+            raise ReadError(f"Failed to read blob {blob}: {exc!s}", details=self.get_details()) from exc
 
         if stream and self.deserializer:
             content = self.deserializer(stream)
@@ -155,6 +195,7 @@ class AzureBlob(
 
         Args:
             prefix: a string prefix to match one or multiple blobs.
+
         Returns:
              pd.DataFrame: Content of all blobs concatenated as a DataFrame.
         """
@@ -169,6 +210,7 @@ class AzureBlob(
 
         Raises:
             CreateError: If the container creation fails.
+
         Returns:
             None
         """
@@ -179,10 +221,10 @@ class AzureBlob(
             container_client.create_container()
             logger.info(f"Container {self.settings.container_name} created successfully")
         except ResourceExistsError:
-            logger.warning(f"Container {self.settings.container_name} already exists")
+            logger.warning(f"Container {self.settings.container_name} already exists, but 'new_container' is set to True.")
         except HttpResponseError as exc:
             logger.error(f"Failed to create container: {exc!s}")
-            raise CreateError(f"Failed to create container in Azure Blob Storage: {exc!s}") from exc
+            raise CreateError(f"Failed to create container in Azure Blob Storage: {exc!s}", details=self.get_details()) from exc
 
     def _create_blob(self, stream: str, blob: str) -> None:
         """
@@ -191,8 +233,10 @@ class AzureBlob(
         Args:
             blob: name of the blob to create.
             stream: data stream to upload to the blob.
+
         Raises:
             CreateError: If the blob creation fails.
+
         Returns:
             None
         """
@@ -203,9 +247,16 @@ class AzureBlob(
         try:
             blob_client.upload_blob(
                 data=stream,
-                overwrite=True,
+                overwrite=self.settings.create.overite_blob_if_exists,
             )
         except HttpResponseError as exc:
+            if exc.error_code == "ContainerNotFound":  # type: ignore[attr-defined]
+                logger.error(f"Container {self.settings.container_name} does not exist: {exc!s}")
+                raise CreateError(
+                    f"Container {self.settings.container_name} does not exist: {exc!s},\n"
+                    f"consider changing new_container setting to True.",
+                    details=self.get_details(),
+                ) from exc
             logger.error(f"Failed to create blob {blob_client.blob_name}: {exc!s}")
             raise CreateError(f"Failed to create blob {blob_client.blob_name}: {exc!s}") from exc
 
@@ -215,8 +266,10 @@ class AzureBlob(
 
         Args:
             blob: name of the blob to delete.
+
         Returns:
             pd.DataFrame: Empty DataFrame upon successful deletion.
+
         Raises:
             DeleteError: If the blob deletion fails.
         """
@@ -227,10 +280,9 @@ class AzureBlob(
         )
         try:
             blob_client.delete_blob()
-            # todo check if we can remove many blobs at once
         except HttpResponseError as exc:
             logger.error(f"Failed to delete blob {blob}: {exc!s}")
-            raise DeleteError(f"Failed to delete blob {blob}: {exc!s}") from exc
+            raise DeleteError(f"Failed to delete blob {blob}: {exc!s}", details=self.get_details()) from exc
         logger.info(f"Blob {blob} deleted successfully.")
         return pd.DataFrame()
 
@@ -240,8 +292,10 @@ class AzureBlob(
 
         Args:
             prefix: a string prefix to match one or multiple blobs.
+
         Returns:
              pd.DataFrame: Empty DataFrame upon successful deletion of all blobs.
+
         Raises:
             DeleteError: If one or more blob deletions fail.
         """
@@ -256,7 +310,7 @@ class AzureBlob(
                 logger.error(f"Failed to delete blob {blob.name}: {exc!s}")
 
         if not all_deleted:
-            raise DeleteError("One or more blobs failed to delete.")
+            raise DeleteError("One or more blobs failed to delete.", details=self.get_details())
 
         logger.info("Data deleted successfully.")
         content = self.concat(results)
@@ -268,8 +322,10 @@ class AzureBlob(
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request.
+
         Returns:
             None
+
         Raises:
             ReadError: If reading the blob(s) fails.
         """
@@ -278,7 +334,7 @@ class AzureBlob(
         elif self.settings.prefix:
             self.output = self._read_blobs(self.settings.prefix)
         else:
-            raise ReadError("Either blob name or prefix must be provided for reading.")
+            raise ReadError("Either blob name or prefix must be provided for reading.", details=self.get_details())
         logger.debug(f"Read data ({len(self.output)}) items from Blob Storage ({self.settings.container_name})")
 
     def create(self, **_kwargs: Any) -> None:
@@ -287,22 +343,24 @@ class AzureBlob(
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
+
         Returns:
             None
+
         Raises:
             CreateError: If the blob creation fails.
         """
 
         if not self.settings.blob_name:
-            raise CreateError("Blob name must be provided for creation.")
+            raise CreateError("Blob name must be provided for creation.", details=self.get_details(), status_code=400)
 
         if not self.serializer:
-            raise CreateError("Data serializer must be provided for creation.")
+            raise CreateError("Data serializer must be provided for creation.", details=self.get_details(), status_code=400)
+
+        if self.settings.create.new_container:
+            self._create_container()
 
         stream = self.serializer(self.input)
-
-        self._create_container()  # if not exist
-
         self._create_blob(stream, blob=self.settings.blob_name)
 
         logger.debug(f"Blob {self.settings.blob_name} created successfully.")
@@ -316,12 +374,26 @@ class AzureBlob(
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
+
         Returns:
             None
+
         Raises:
             DeleteError: If the blob deletion fails.
         """
-        if self.settings.blob_name:
+        if self.settings.delete.delete_container:
+            container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+                self.settings.container_name
+            )
+            try:
+                container_client.delete_container()
+                logger.info(f"Container {self.settings.container_name} deleted successfully.")
+            except HttpResponseError as exc:
+                logger.error(f"Failed to delete container {self.settings.container_name}: {exc!s}")
+                raise DeleteError(
+                    f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
+                ) from exc
+        elif self.settings.blob_name:
             blob_name = self.settings.blob_name
             self._delete_blob(blob_name)
             logger.info(f"Blob {blob_name} deleted successfully.")
@@ -330,7 +402,9 @@ class AzureBlob(
             self._delete_blobs(prefix)
             logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
         else:
-            raise DeleteError("Either blob name or prefix must be provided for deletion.")
+            raise DeleteError(
+                "Either blob name or prefix must be provided for deletion.", details=self.get_details(), status_code=400
+            )
 
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
@@ -351,6 +425,7 @@ class AzureBlob(
 
         Args:
             dfs: DataFrames to concatenate.
+
         Returns:
              DataFrame: Concatenated DataFrame or empty DataFrame if input list is empty.
         """

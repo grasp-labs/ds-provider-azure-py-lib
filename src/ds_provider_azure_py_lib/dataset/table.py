@@ -23,14 +23,21 @@ Example:
     ...             account_name="account name",
     ...             access_key="access key"
     ...         ),
-    ...     ),
+    ...     id=uuid.uuid4(),
+    ...     name="testazurepackage",
+    ...     version="0.0.1",
+    ...     description="testazurepackage",
+    ... ),
+    ... id=uuid.uuid4(),
+    ... name="testazurepackage",
+    ... version="0.0.1",
+    ... description="testazurepackage"
     ... )
     >>> azure_table.read()
     >>> table_data = azure_table.output
 """
 
 import builtins
-import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
@@ -40,8 +47,7 @@ from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
 )
-from azure.core.paging import ItemPaged
-from azure.data.tables import TableClient, TableEntity, TableTransactionError, UpdateMode
+from azure.data.tables import TableClient, TableTransactionError, UpdateMode
 from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
@@ -54,66 +60,14 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     ReadError,
     UpdateError,
 )
-from ds_resource_plugin_py_lib.common.serde.deserialize import DataDeserializer
-from ds_resource_plugin_py_lib.common.serde.serialize import DataSerializer
 
 from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
+from ..serde import AzureTableDeserializer, AzureTableSerializer
 
 logger = Logger.get_logger(__name__, package=True)
 
 TransactionEntry = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], Mapping[str, Any]]
-
-
-class AzureTableSerializer(DataSerializer):
-    """
-    Serialize Azure Table Storage data.
-    The serializer is responsible for converting the data from
-    a DataFrame into a format that can be sent to the Azure Table Storage API.
-    """
-
-    def __call__(self, obj: pd.DataFrame, **_kwargs: Any) -> Any | dict[str, Any]:
-        """
-        Serialize the data from a DataFrame into a dict.
-        :param df: pd.DataFrame
-        :param _kwargs: Additional keyword arguments
-        :return: Dict
-        """
-        df = obj.assign(
-            RowKey=obj["RowKey"].astype(str),
-            PartitionKey=obj["PartitionKey"].astype(str),
-        )
-        entity = df.iloc[0].to_dict()
-        for key, value in entity.items():
-            if isinstance(value, dict):
-                entity[key] = json.dumps(value)
-        return entity
-
-
-class AzureTableDeserializer(DataDeserializer):
-    """
-    Deserialize Azure Table Storage data.
-    The deserializer is responsible for converting the data from
-    a dict into a format that can be sent to the Azure Table Storage API.
-    """
-
-    def __call__(self, value: ItemPaged[TableEntity], **_kwargs: Any) -> Any:
-        """
-        Deserialize the data from a DataFrame into a dict.
-        :param df: pd.DataFrame
-        :param _kwargs: Additional keyword arguments
-        :return: Dict
-        """
-        data = []
-        for entity in value:
-            entity_data = {key: entity[key] for key in entity}
-            if "Timestamp" not in entity_data:
-                entity_data["Timestamp"] = entity.metadata["timestamp"]
-            data.append(entity_data)
-
-        if not data:
-            return pd.DataFrame()
-        return pd.DataFrame(data)
 
 
 @dataclass(kw_only=True)
@@ -122,12 +76,12 @@ class ReadSettings:
     Settings specific to the read() operation.
 
     These settings only apply when reading data from the database
-    and do not affect create(), delete(), update(), or rename() operations.
+    and do not affect other operations like: create(), delete(), update(), or rename().
     """
 
     query_filter: str | None = None
     """
-    An OData filter string to filter the entities returned by the read() operation.
+    An OData-compliant string to filter the entities returned by the read() operation.
     If None, no filter is applied and all entities are returned.
 
     Example: "PartitionKey eq '{self.partition_key}' and RowKey eq '{self.row_key}'"
@@ -140,7 +94,7 @@ class DeleteSettings:
     Settings specific to the delete() operation.
 
     These settings only apply when deleting data from the database
-    and do not affect create(), read(), update(), or rename() operations.
+    and do not affect other operations like:  create(), read(), update(), or rename().
     """
 
     delete_table: bool = False
@@ -161,17 +115,17 @@ class AzureTableDatasetSettings(DatasetSettings):
 
     table_name: str
 
-    delete: DeleteSettings | None = None
+    delete: DeleteSettings = field(default_factory=lambda: DeleteSettings())
     """
     Delete-specific settings. Only applies to the read() operation.
 
-    If None, read() will use default behavior (No table removed on delete, just entity).
+    By default, delete() will use default behavior (No table removed on delete, just entity).
     """
-    read: ReadSettings | None = None
+    read: ReadSettings = field(default_factory=lambda: ReadSettings())
     """
     Read-specific settings. Only applies to the read() operation.
 
-    If None, read() will use read without filter.
+    By default, read() will use read without filter.
     """
 
 
@@ -209,6 +163,7 @@ class AzureTable(
     def type(self) -> ResourceType:
         """
         Get the type of the Dataset.
+
         Returns:
             ResourceType
         """
@@ -217,35 +172,49 @@ class AzureTable(
     def _prepare_content(self, content: pd.DataFrame) -> dict[str, Any]:
         """
         Ensure that the content is provided and is in the correct format.
+
         Args:
             content (pd.DataFrame): The content to prepare.
+
         Returns:
             dict: The prepared content.
+
         Raises:
-            TypeError: If the content is not a pandas DataFrame.
-            ValueError: If the DataFrame is empty.
-            NotImplementedError: If required columns are missing.
+            DatasetException: If the content is not a DataFrame, is empty, or does not contain required columns.
         """
         if not isinstance(content, pd.DataFrame):
-            raise DatasetException(f"The content must be a pandas DataFrame, got {type(content)} instead.", status_code=400)
+            raise DatasetException(
+                f"The content must be a pandas DataFrame, got {type(content)} instead.",
+                status_code=400,
+                details=self.get_details(),
+            )
 
         if len(content) == 0:
-            raise DatasetException("The DataFrame is empty. Cannot prepare content for Azure Table Storage.", status_code=400)
+            raise DatasetException(
+                "The DataFrame is empty. Cannot prepare content for Azure Table Storage.",
+                status_code=400,
+                details=self.get_details(),
+            )
 
         if len(content) > 1:
             logger.warning("Are you sure you want to process multiple rows?")
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(content.columns):
-            raise DatasetException(f"The DataFrame must contain the columns: {', '.join(required_columns)}", status_code=400)
+            raise DatasetException(
+                f"The DataFrame must contain the columns: {', '.join(required_columns)}",
+                status_code=400,
+                details=self.get_details(),
+            )
 
         if self.serializer is None:
-            raise DatasetException("Serializer is not initialized.", status_code=400)
+            raise DatasetException("Serializer is not initialized.", status_code=400, details=self.get_details())
         return self.serializer(content)
 
     def _get_table_client(self) -> TableClient:
         """
         Return a TableClient for the currently configured table.
+
         Returns:
             TableClient
         """
@@ -255,8 +224,19 @@ class AzureTable(
         """
         Build a list of transaction entries from self.input.
         operation: operation name as expected by TableClient.submit_transaction, e.g. "create", "upsert", "delete"
-        params: optional params dict passed as third item in tuple (when required) e.g. {"mode": UpdateMode.REPLACE}
+
+        Args:
+            operation (str): The operation to perform.
+            params: optional params dict passed as third item in tuple (when required) e.g. {"mode": UpdateMode.REPLACE}
+
         Returns:
+            list[TransactionEntry]
+
+        Raises:
+            CreateError: If there is an error preparing content for creation.
+            UpdateError: If there is an error preparing content for update.
+            DeleteError: If there is an error preparing content for deletion.
+            DatasetException: If there is a general error preparing content.
         """
         transaction: list[TransactionEntry] = []
         for _, row in self.input.iterrows():
@@ -281,6 +261,13 @@ class AzureTable(
     def _submit_transaction(self, transaction: Iterable[TransactionEntry], error_cls: builtins.type[DatasetException]) -> None:
         """
         Submit transaction and map TableTransactionError to provided error_type.
+
+        Args:
+            transaction (Iterable[TransactionEntry]): The transaction to submit.
+            error_cls (builtins.type[DatasetException]): The exception class to raise on error.
+
+        Raises:
+            error_cls: An error submitting the transaction.
         """
         table_client = self._get_table_client()
         try:
@@ -300,8 +287,9 @@ class AzureTable(
 
         Returns:
             None
+
         Raises:
-            CreateError: If the table could not be created.
+            CreateError: If the table could not be created due to an error other than it already existing.
         """
         try:
             self.linked_service.table_service_client.create_table(
@@ -311,7 +299,7 @@ class AzureTable(
         except ResourceExistsError:
             logger.debug(f"Table ({self.settings.table_name}) already exists.")
         except HttpResponseError as exc:
-            raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}") from exc
+            raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
     def _delete_table(self) -> None:
         """
@@ -319,6 +307,7 @@ class AzureTable(
 
         Returns:
             None
+
         Raises:
             DeleteError: If the table could not be deleted.
         """
@@ -327,9 +316,7 @@ class AzureTable(
             self.linked_service.table_service_client.delete_table(table_name=self.settings.table_name)
         except HttpResponseError as exc:
             logger.error(f"Failed to delete Table ({self.settings.table_name})")
-            raise DeleteError(
-                f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()
-            ) from exc  # todo change status_code, add details
+            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
         logger.info(f"Successfully deleted table:{self.settings.table_name}.")
 
     def read(self, **__kwargs: Any) -> None:
@@ -338,22 +325,26 @@ class AzureTable(
 
         Args:
             __kwargs: Additional keyword arguments
+
         Returns:
-             List[Dict]
+            None
+
+        Raises:
+            ReadError: If there is an error reading from Azure Table Storage.
         """
         table_client: TableClient = self.linked_service.table_service_client.get_table_client(table_name=self.settings.table_name)
         try:
-            if self.settings.read and self.settings.read.query_filter:
+            if self.settings.read.query_filter:
                 entities = table_client.query_entities(
                     query_filter=self.settings.read.query_filter,
                 )
             else:
                 entities = table_client.list_entities()
             if self.deserializer is None:
-                raise ValueError("Deserializer is not initialized.")  # todo different error
+                raise ReadError("Deserializer is not initialized.", status_code=400, details=self.get_details())
             self.output = self.deserializer(entities)
         except HttpResponseError as exc:
-            raise ReadError(f"Failed to read from Table Storage: {exc!s}") from exc  # todo change status_code, add details
+            raise ReadError(f"Failed to read from Table Storage: {exc!s}", details=self.get_details(), status_code=500) from exc
 
         logger.debug(f"Read data from Table Storage: {len(self.output)} items")
 
@@ -363,28 +354,21 @@ class AzureTable(
 
         Returns:
             None
+
         Raises:
             CreateError: If the entity could not be created.
         """
-        if len(self.input) == 0:
-            raise CreateError(
-                "Input DataFrame is empty. Cannot create entity in Azure Table Storage.",
-                status_code=400,
-                details=self.get_details(),
-            )
-
         self._create_table()
         transaction = self._build_transaction_from_input("create")
         try:
             self._submit_transaction(transaction, CreateError)
         except TableTransactionError as exc:
-            if exc.status_code:
-                raise CreateError(message=exc.message, status_code=exc.status_code, details=self.get_details()) from exc
-            else:
-                raise CreateError(message=exc.message) from exc
-            pass
-        except HttpResponseError:
-            pass
+            raise CreateError(
+                message=exc.message, status_code=exc.status_code if exc.status_code else 500, details=self.get_details()
+            ) from exc
+
+        except HttpResponseError as exc:
+            raise CreateError("Failed to create entity in Azure Table Storage.", details=self.get_details()) from exc
         self.output = self.input
 
     def update(self, **_kwargs: Any) -> None:
@@ -393,32 +377,34 @@ class AzureTable(
 
         Returns:
             None
-        Raises:
-            UpdateError: If the entity could not be updated.
         """
         if len(self.input) == 0:
-            raise UpdateError(
-                "Input DataFrame is empty. Cannot update entity in Azure Table Storage."
-            )  # todo change status_code, add details
+            logger.debug("Input DataFrame is empty. No entities to update in Azure Table Storage.")
+        else:
+            transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
+            self._submit_transaction(transaction, UpdateError)
+            logger.info("Successfully updated entities.")
 
-        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
-        self._submit_transaction(transaction, UpdateError)
         self.output = self.input
-        logger.info("Successfully updated entities.")
 
     def delete(self, **_kwargs: Any) -> None:
         """
         Delete an entity or table in Azure Table Storage.
+
+        Args:
+            _kwargs: Additional keyword arguments
+
+        Returns:
+            None
+
+        Raises:
+            DeleteError: If there is an error deleting from Azure Table Storage.
         """
-        if self.settings.delete and self.settings.delete.delete_table:
+        if self.settings.delete.delete_table:
             self._delete_table()
+        elif len(self.input) == 0:
+            logger.debug("Input DataFrame is empty. No entities to delete in Azure Table.")
         else:
-            if len(self.input) == 0:
-                raise DeleteError(
-                    "Input DataFrame is empty. Cannot delete entity in Azure Table Storage.",
-                    status_code=400,
-                    details=self.get_details(),
-                )  # todo change status_code, add details
             transaction = self._build_transaction_from_input("delete")
             logger.debug(f"Deleting entities: {len(transaction)} items")
             self._submit_transaction(transaction, DeleteError)

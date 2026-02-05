@@ -10,16 +10,25 @@ This example demonstrates how to:
 - List all tables in the Table storage.
 - List all Blob containers in the storage account.
 """
+import os
+import uuid
 
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
 def main():
+    account_name = os.environ.get("ACCOUNT_NAME")
+    account_key = os.environ.get("ACCOUNT_KEY")
+
     linked_service = AzureLinkedService(
         settings=AzureLinkedServiceSettings(
-            account_name="...",
-            access_key="...",
-        )
+            account_name=account_name,
+            access_key=account_key,
+        ),
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+        description="testazurepackage"
     )
 
     linked_service.connect()
@@ -32,15 +41,18 @@ def main():
 
     containers = linked_service.blob_service_client.list_containers()
     print("\nContainers:")
+    container_name = None
     for container in containers:
         print(f" -{container.name}")
+        container_name = container.name
 
-    test_container = linked_service.blob_service_client.get_container_client("test-blob")
-    blobs = test_container.list_blobs()
-    print("\nBlobs in 'test-blob' container:")
-    for blob in blobs:
-        print(f" -{blob.name}")
-
+    if container_name:
+        test_container = linked_service.blob_service_client.get_container_client(container_name)
+        if test_container.exists():
+            blobs = test_container.list_blobs()
+            print(f"\nBlobs in {container_name} container:")
+            for blob in blobs:
+                print(f" -{blob.name}")
 
 if __name__ == "__main__":
     main()

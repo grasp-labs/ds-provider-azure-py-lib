@@ -20,6 +20,8 @@ Prerequisites:
 """
 
 import os
+import uuid
+
 import pandas as pd
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
@@ -30,8 +32,8 @@ from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLin
 
 def main():
     dataset = AzureTable(
-        serializer=AzureTableSerializer(),
-        deserializer=AzureTableDeserializer(),
+        serializer=AzureTableSerializer(), # can be omitted as the default serializer is AzureTableSerializer
+        deserializer=AzureTableDeserializer(), # can be omitted as the default deserializer is AzureTableDeserializer
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
             read=ReadSettings(query_filter="PartitionKey eq '1'"),
@@ -41,8 +43,16 @@ def main():
             settings=AzureLinkedServiceSettings(
                 account_name=os.environ.get("ACCOUNT_NAME"),
                 access_key=os.environ.get("ACCOUNT_KEY")
-            )
-        )
+            ),
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
+            description="testazurepackage",
+        ),
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+        description="testazurepackage"
     )
     dataset.linked_service.connect()
     dataset.create()

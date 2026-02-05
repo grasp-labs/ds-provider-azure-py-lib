@@ -5,11 +5,22 @@
 Azure Linked Service
 
 This module implements a linked service for Azure Storage services (Blob and Table).
+Example:
+>>>linked_service = AzureLinkedService(
+...        settings=AzureLinkedServiceSettings(
+...            account_name="account name",
+...            access_key="account key",
+...        ),
+...        id=uuid.uuid4(),
+...        name="testazurepackage",
+...        version="0.0.1",
+...        description="testazurepackage"
+...    )
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 from azure.core.credentials import AzureNamedKeyCredential
@@ -31,7 +42,7 @@ class AzureLinkedServiceSettings(LinkedServiceSettings):
     """
 
     account_name: str
-    access_key: str
+    access_key: str = field(metadata={"mask": True})
 
 
 AzureLinkedServiceSettingsType = TypeVar(
@@ -49,7 +60,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     settings: AzureLinkedServiceSettingsType
     _blob_service_client: BlobServiceClient | None = None
     _table_service_client: TableServiceClient | None = None
-    _credential: AzureNamedKeyCredential | None = None
+    _credential: AzureNamedKeyCredential | None = field(default=None, metadata={"serialize": False})
 
     def check_settings_is_set(self) -> None:
         """
@@ -112,8 +123,6 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
 
         Returns:
             BlobServiceClient
-        Raises:
-            ConnectionError: If blob service client was not created successfully.
         """
         logger.debug("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
@@ -129,8 +138,6 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
 
         Returns:
              TableServiceClient
-        Raises:
-             ConnectionError: If table service client was not created successfully.
         """
         logger.debug("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"

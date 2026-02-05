@@ -567,14 +567,14 @@ wheels = [
 
 [[package]]
 name = "ds-common-serde-py-lib"
-version = "0.1.0a3"
+version = "0.1.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ds-common-logger-py-lib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/00/2877a13899df85949293b63d0c40e04cf7ebe4b4722a2455146cc07e3617/ds_common_serde_py_lib-0.1.0a3.tar.gz", hash = "sha256:97a19ffcd961cfcd22c26883f7ff7be984620ff4c608d3e5349e100e21911b7a", size = 20754, upload-time = "2026-01-26T16:30:19.508Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/26/14ce719b3ef718c8585bb498c9ce54a71e34c573060240a713dd731ca669/ds_common_serde_py_lib-0.1.0b1.tar.gz", hash = "sha256:6885de00024f773c1b29cbd1903947cd4e2e393ecc7a8251c99b1604976b1ac9", size = 21260, upload-time = "2026-02-04T18:55:15.894Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/d4/dcdf562958c472b700b9bd81285e0ce2b917b593a03989c1792c75eafb91/ds_common_serde_py_lib-0.1.0a3-py3-none-any.whl", hash = "sha256:42a5d2200793741a2bc2219934ba5b2806676e3f703fc06edc4feb48a61e1e10", size = 16064, upload-time = "2026-01-26T16:30:17.068Z" },
+    { url = "https://files.pythonhosted.org/packages/49/21/10c2a2ecc3fb4586e278185a38a6111d1c53002495f5cf6f0348fbf591d0/ds_common_serde_py_lib-0.1.0b1-py3-none-any.whl", hash = "sha256:3fdc2c8f6283a81328ed277e6e10b3014835ad853351f035b4568dc12d1babd3", size = 16329, upload-time = "2026-02-04T18:55:14.473Z" },
 ]
 
 [[package]]
@@ -627,7 +627,7 @@ requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.9.3" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "ds-common-logger-py-lib", specifier = ">=0.1.0a5,<1.0.0" },
-    { name = "ds-resource-plugin-py-lib", specifier = ">=0.1.0a5,<1.0.0" },
+    { name = "ds-resource-plugin-py-lib", specifier = ">=0.1.0b1,<1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
     { name = "pandas", specifier = ">=2.1.0,<3.0.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.1.0" },
@@ -651,7 +651,7 @@ provides-extras = ["dev", "test", "docs"]
 
 [[package]]
 name = "ds-resource-plugin-py-lib"
-version = "0.1.0a5"
+version = "0.1.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "awswrangler" },
@@ -661,9 +661,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/26/7078f6aaeed8e519f4a16699a0d05b3ebc45c9aebf55826b1e080486835f/ds_resource_plugin_py_lib-0.1.0a5.tar.gz", hash = "sha256:96531c97ec994183b8e59417a3dbed9ba9baccb4e8cd38c3e8d29f4620b5651a", size = 18824, upload-time = "2026-01-28T08:06:44.41Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/bb/0e4dbca2e1aa0eec7d14f46ab6b16ab3746f333a20af8dbb06d9cae583ff/ds_resource_plugin_py_lib-0.1.0b1.tar.gz", hash = "sha256:05ff7153361cf8b90654ac12169f6328428093c59d28da10113c763069b9a8a8", size = 18895, upload-time = "2026-02-05T10:40:38.641Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/81/4aea66d612d101eee1ebbce51c73c5cd9addab7269e077fd1f1499c850bb/ds_resource_plugin_py_lib-0.1.0a5-py3-none-any.whl", hash = "sha256:022bb3570f7acecf2018286b98fcef17d31ea7a7475d02abbadbbeb9b2be63f9", size = 26143, upload-time = "2026-01-28T08:06:42.619Z" },
+    { url = "https://files.pythonhosted.org/packages/27/1e/67362fe17eb82ec1cb5af171cd1d34070f03c4f9d4965647ec4500942a61/ds_resource_plugin_py_lib-0.1.0b1-py3-none-any.whl", hash = "sha256:e6ed286d04985f2de3eda89a8d2bed92e9e8a07993fadf227f0c087b62dfa69a", size = 26234, upload-time = "2026-02-05T10:40:37.27Z" },
 ]
 
 [[package]]
