@@ -12,6 +12,7 @@ Covers:
 
 import io
 import unittest
+import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -24,7 +25,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
-from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings
+from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, DeleteSettings
 from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService
 
@@ -117,6 +118,9 @@ class TestAzureBlobDataset(unittest.TestCase):
             serializer=PandasSerializer(format=DatasetStorageFormatType.CSV),
             deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         dataset.read()
@@ -138,6 +142,9 @@ class TestAzureBlobDataset(unittest.TestCase):
             serializer=PandasSerializer(format=DatasetStorageFormatType.CSV),
             deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         dataset.read()
@@ -163,6 +170,9 @@ class TestAzureBlobDataset(unittest.TestCase):
             serializer=PandasSerializer(format=DatasetStorageFormatType.CSV),
             deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         dataset.read()
@@ -185,6 +195,9 @@ class TestAzureBlobDataset(unittest.TestCase):
             serializer=PandasSerializer(format=DatasetStorageFormatType.CSV),
             deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         dataset.delete()
@@ -210,6 +223,9 @@ class TestAzureBlobDataset(unittest.TestCase):
             serializer=PandasSerializer(format=DatasetStorageFormatType.CSV),
             deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         dataset.delete()
@@ -271,6 +287,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked_service,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         with pytest.raises(ReadError):
@@ -288,6 +307,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         with pytest.raises(CreateError):
             ds1.create()
@@ -297,6 +319,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=None,
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         with pytest.raises(CreateError):
             ds2.create()
@@ -316,6 +341,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         ds._create_container()  # should not raise
 
@@ -330,6 +358,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked2,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         ds2._create_container()  # should not raise
 
@@ -344,6 +375,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked3,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         with pytest.raises(CreateError):
             ds3._create_container()
@@ -363,6 +397,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         with pytest.raises(CreateError):
@@ -384,6 +421,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         with pytest.raises(ReadError):
@@ -403,6 +443,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=bad_deserializer,
             linked_service=linked2,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         res = ds2._read_blob("b")
@@ -425,6 +468,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         with pytest.raises(DeleteError):
@@ -446,6 +492,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         def fake_delete_blob(name):
@@ -469,6 +518,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         with pytest.raises(NotImplementedError):
@@ -497,6 +549,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         ds.input = pd.DataFrame({"x": [1]})
 
@@ -530,6 +585,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         assert ds.type == ResourceType.BLOB
 
@@ -543,6 +601,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
         with pytest.raises(DeleteError):
             ds.delete()
@@ -557,6 +618,9 @@ class TestAzureBlobDataset2(unittest.TestCase):
             serializer=PandasSerializer(format="CSV"),
             deserializer=PandasDeserializer(format="CSV"),
             linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
         )
 
         details = ds.get_details()
@@ -567,3 +631,40 @@ class TestAzureBlobDataset2(unittest.TestCase):
             "blob_name": "b",
             "prefix": None,
         }
+
+    @staticmethod
+    def _make_blob(delete_container: bool) -> AzureBlob:
+        linked_service = MagicMock()
+        container_client = MagicMock()
+        linked_service.blob_service_client.get_container_client.return_value = container_client
+
+        settings = AzureBlobDatasetSettings(
+            container_name="container",
+            delete=DeleteSettings(delete_container=delete_container),
+        )
+
+        return AzureBlob(
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
+            linked_service=linked_service,
+            settings=settings,
+            serializer=MagicMock(),
+            deserializer=MagicMock(),
+        )
+
+    def test_delete_deletes_container(self) -> None:
+        blob = self._make_blob(delete_container=True)
+        container_client = blob.linked_service.blob_service_client.get_container_client.return_value
+
+        blob.delete()
+
+        container_client.delete_container.assert_called_once()
+
+    def test_delete_container_http_error_raises_delete_error(self) -> None:
+        blob = self._make_blob(delete_container=True)
+        container_client = blob.linked_service.blob_service_client.get_container_client.return_value
+        container_client.delete_container.side_effect = HttpResponseError(message="boom")
+
+        with pytest.raises(DeleteError):
+            blob.delete()

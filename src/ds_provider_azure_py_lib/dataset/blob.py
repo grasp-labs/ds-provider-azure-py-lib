@@ -250,15 +250,8 @@ class AzureBlob(
                 overwrite=self.settings.create.overite_blob_if_exists,
             )
         except HttpResponseError as exc:
-            if exc.error_code == "ContainerNotFound":  # type: ignore[attr-defined]
-                logger.error(f"Container {self.settings.container_name} does not exist: {exc!s}")
-                raise CreateError(
-                    f"Container {self.settings.container_name} does not exist: {exc!s},\n"
-                    f"consider changing new_container setting to True.",
-                    details=self.get_details(),
-                ) from exc
             logger.error(f"Failed to create blob {blob_client.blob_name}: {exc!s}")
-            raise CreateError(f"Failed to create blob {blob_client.blob_name}: {exc!s}") from exc
+            raise CreateError(f"Failed to create blob {blob_client.blob_name}: {exc!s}", details=self.get_details()) from exc
 
     def _delete_blob(self, blob: str) -> pd.DataFrame:
         """

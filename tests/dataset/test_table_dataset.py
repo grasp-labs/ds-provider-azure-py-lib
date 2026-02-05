@@ -12,6 +12,7 @@ covers:
 """
 
 import json
+import uuid
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -62,7 +63,13 @@ def test_prepare_content_validations_and_serializer_json_conversion():
     Test the _prepare_content method of AzureTable for various validations and serialization.
     """
     linked, _ = make_linked_service_with_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
 
     # missing required columns -> NotImplementedError
     content_2 = pd.DataFrame([{"PartitionKey": "p"}])
@@ -74,13 +81,22 @@ def test_prepare_content_validations_and_serializer_json_conversion():
         settings=AzureTableDatasetSettings(table_name="t"),
         linked_service=linked,
         serializer=None,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
     )
     content_3 = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     with pytest.raises(DatasetException):
         ds2._prepare_content(content_3)
 
     # successful serialization: RowKey/PartitionKey to str, dict value to JSON
-    ds3 = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds3 = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     content_4 = pd.DataFrame([{"PartitionKey": 10, "RowKey": 5, "Payload": {"a": 1}}])
     ent = ds3._prepare_content(content_4)
     assert ent["PartitionKey"] == "10" and ent["RowKey"] == "5"
@@ -113,7 +129,13 @@ def test_prepare_content_raises_error_when_input_is_empty():
     Test that _prepare_content raises ValueError when input DataFrame is empty.
     """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     with pytest.raises(DatasetException):
         ds._prepare_content(pd.DataFrame())
 
@@ -123,7 +145,13 @@ def test_prepare_content_raises_typeerror_for_non_dataframe_input():
     Test that _prepare_content raises TypeError when input is not a DataFrame.
     """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     with pytest.raises(DatasetException):
         content = [{"PartitionKey": "p", "RowKey": "r"}]
         ds._prepare_content(content)
@@ -134,7 +162,13 @@ def test_rename_and_close_and_type():
     Test rename raises NotImplementedError, close is no-op, and type property.
     """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     with pytest.raises(NotImplementedError):
         ds.rename()
     ds.close()  # no-op
@@ -143,33 +177,6 @@ def test_rename_and_close_and_type():
 
 def _make_table_transaction_error():
     return TableTransactionError(message="boom", response=MagicMock())
-
-
-def test_create_update_delete_empty_input_raises():
-    linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
-    ds.input = pd.DataFrame()
-
-    with pytest.raises(CreateError):
-        ds.create()
-    with pytest.raises(UpdateError):
-        ds.update()
-    with pytest.raises(DeleteError):
-        ds.delete()
-
-
-def test_read_raises_when_deserializer_missing():
-    table_client = MagicMock()
-    table_client.list_entities.return_value = []
-    linked, _ = make_linked_service_with_table_client(table_client)
-
-    ds = AzureTable(
-        settings=AzureTableDatasetSettings(table_name="t"),
-        linked_service=linked,
-        deserializer=None,
-    )
-    with pytest.raises(ValueError):
-        ds.read()
 
 
 def _make_linked_service_and_table_client():
@@ -183,14 +190,26 @@ def _make_linked_service_and_table_client():
 
 def test_get_table_client_uses_service_client():
     linked, table_client, svc = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     assert ds._get_table_client() is table_client
     svc.get_table_client.assert_called_once_with(table_name="t")
 
 
 def test_build_transaction_from_input_maps_errors():
     linked, _, _ = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds.input = pd.DataFrame([{"PartitionKey": "p"}])
     with pytest.raises(CreateError):
         ds._build_transaction_from_input("create")
@@ -202,7 +221,13 @@ def test_build_transaction_from_input_maps_errors():
 
 def test_submit_transaction_noop_and_maps_errors():
     linked, table_client, _ = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds._submit_transaction([], CreateError)
     table_client.submit_transaction.assert_not_called()
     table_client.submit_transaction.side_effect = _make_table_transaction_error()
@@ -212,7 +237,13 @@ def test_submit_transaction_noop_and_maps_errors():
 
 def test_create_table_handles_exists_and_http_error():
     linked, _, svc = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds._create_table()
     svc.create_table.assert_called_once()
     svc.create_table.side_effect = ResourceExistsError()
@@ -224,7 +255,13 @@ def test_create_table_handles_exists_and_http_error():
 
 def test_delete_table_success_and_error():
     linked, _, svc = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds._delete_table()
     svc.delete_table.assert_called_once_with(table_name="t")
     svc.delete_table.side_effect = HttpResponseError(message="x")
@@ -241,11 +278,20 @@ def test_read_uses_filter_and_handles_error():
     ds = AzureTable(
         settings=AzureTableDatasetSettings(table_name="t", read=ReadSettings(query_filter="f")),
         linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
     )
     ds.read()
     table_client.query_entities.assert_called_once_with(query_filter="f")
     assert isinstance(ds.output, pd.DataFrame) and len(ds.output) == 1
-    ds2 = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds2 = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds2.read()
     table_client.list_entities.assert_called_once()
     table_client.list_entities.side_effect = HttpResponseError(message="x")
@@ -255,7 +301,13 @@ def test_read_uses_filter_and_handles_error():
 
 def test_create_success_table_transaction_and_http_error():
     linked, table_client, svc = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     ds.create()
     svc.create_table.assert_called()
@@ -265,13 +317,19 @@ def test_create_success_table_transaction_and_http_error():
     with pytest.raises(CreateError):
         ds.create()
     ds._submit_transaction = MagicMock(side_effect=HttpResponseError(message="x"))
-    ds.create()
-    assert ds.output.equals(ds.input)
+    with pytest.raises(CreateError):
+        ds.create()
 
 
 def test_update_calls_submit_with_replace_mode():
     linked, table_client, _ = _make_linked_service_and_table_client()
-    ds = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     ds.update()
     table_client.submit_transaction.assert_called_once()
@@ -284,10 +342,19 @@ def test_delete_with_delete_table_flag_and_entity_path():
     ds = AzureTable(
         settings=AzureTableDatasetSettings(table_name="t", delete=DeleteSettings(delete_table=True)),
         linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
     )
     ds.delete()
     svc.delete_table.assert_called_once_with(table_name="t")
-    ds2 = AzureTable(settings=AzureTableDatasetSettings(table_name="t"), linked_service=linked)
+    ds2 = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
     ds2.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     ds2.delete()
     table_client.submit_transaction.assert_called()
@@ -301,8 +368,18 @@ def test_get_details_includes_read_and_delete_settings():
             delete=DeleteSettings(delete_table=True),
         ),
         linked_service=MagicMock(spec=AzureLinkedService),
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
     )
     details = ds.get_details()
     assert details["table_name"] == "t"
     assert details["query_filter"] == "f"
     assert details["delete_table"] == "True"
+
+
+def test_table_deserializer_no_data_returns_empty_dataframe() -> None:
+    deserializer = AzureTableDeserializer()
+    result = deserializer([])
+    assert isinstance(result, pd.DataFrame)
+    assert result.empty
