@@ -35,7 +35,7 @@ def main():
             blob_name="test.csv",
             # prefix="test",  # to read all blobs with this prefix (all of them must be in the format specified in deserializer), remove blob_name when using prefix
             create=CreateSettings(
-                overite_blob_if_exists=True, # if True, it will overwrite the blob if it already exists. If False, it will raise an error if the blob already exists. default is True.
+                overwrite_blob_if_exists=True, # if True, it will overwrite the blob if it already exists. If False, it will raise an error if the blob already exists. default is True.
                 new_container=True # if True, it will create a new container if the specified container does not exist. If False, it will raise an error if the container does not exist. default is True.
             ),
             delete=DeleteSettings(

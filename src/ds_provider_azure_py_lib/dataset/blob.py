@@ -15,7 +15,7 @@ Example:
     ...         blob_name="path/to/example_file.csv",
     ...         prefix=None, # for multiple blobs, provide a prefix instead of blob_name
     ...         create=CreateSettings(
-    ...            overite_blob_if_exists=True, # overwrite the blob that already exists or raise an error
+    ...            overwrite_blob_if_exists=True, # overwrite the blob that already exists or raise an error
     ...            new_container=True # create a new container or raise an error
     ...         ),
     ...         delete=DeleteSettings(
@@ -76,8 +76,18 @@ class CreateSettings:
     Settings for create operations.
     """
 
-    overite_blob_if_exists: bool = True  # controls whether to overwrite an existing blob in case of name conflict
-    new_container: bool = True  # confirm creation of a new container if it does not exist already
+    overwrite_blob_if_exists: bool = True
+    """
+    controls whether to overwrite an existing blob in case of name conflict.
+    If True, the create operation will overwrite the existing blob with the new content.
+    If False, the create operation will raise an error if a blob with the same name already exists.
+    """
+    new_container: bool = True
+    """
+    confirm creation of a new container if it does not exist already.
+    If True, the create operation will attempt to create the container if it does not exist.
+    If False, the create operation will raise an error if the container does not exist.
+    """
 
 
 @dataclass(kw_only=True)
@@ -105,8 +115,8 @@ class AzureBlobDatasetSettings(DatasetSettings):
     blob_name: str | None = None
     prefix: str | None = None
 
-    create: CreateSettings = field(default_factory=lambda: CreateSettings())
-    delete: DeleteSettings = field(default_factory=lambda: DeleteSettings())
+    create: CreateSettings = field(default_factory=CreateSettings)
+    delete: DeleteSettings = field(default_factory=DeleteSettings)
 
 
 AzureBlobDatasetSettingsType = TypeVar(
@@ -247,7 +257,7 @@ class AzureBlob(
         try:
             blob_client.upload_blob(
                 data=stream,
-                overwrite=self.settings.create.overite_blob_if_exists,
+                overwrite=self.settings.create.overwrite_blob_if_exists,
             )
         except HttpResponseError as exc:
             logger.error(f"Failed to create blob {blob_client.blob_name}: {exc!s}")

@@ -10,7 +10,7 @@ Example:
     >>> azure_linked_service = AzureLinkedService(settings=AzureLinkedServiceSettings(
     ...    account_name="your_account_name",
     ...    access_key="access key"))
-    >>> blob_service_client, table_service_client = azure_linked_service.connect()
+    >>> azure_linked_service.connect()
 """
 
 from .storage_account import AzureLinkedService, AzureLinkedServiceSettings

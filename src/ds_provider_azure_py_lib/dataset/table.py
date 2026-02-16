@@ -117,7 +117,7 @@ class AzureTableDatasetSettings(DatasetSettings):
 
     delete: DeleteSettings = field(default_factory=lambda: DeleteSettings())
     """
-    Delete-specific settings. Only applies to the read() operation.
+    Delete-specific settings. Only applies to the delete() operation.
 
     By default, delete() will use default behavior (No table removed on delete, just entity).
     """
@@ -152,11 +152,11 @@ class AzureTable(
     linked_service: AzureLinkedServiceType
     settings: AzureTableDatasetSettingsType
 
-    serializer: AzureTableSerializer | None = field(
-        default_factory=lambda: AzureTableSerializer(),
+    serializer: AzureTableSerializer = field(
+        default_factory=AzureTableSerializer,
     )
-    deserializer: AzureTableDeserializer | None = field(
-        default_factory=lambda: AzureTableDeserializer(),
+    deserializer: AzureTableDeserializer = field(
+        default_factory=AzureTableDeserializer,
     )
 
     @property
@@ -195,9 +195,6 @@ class AzureTable(
                 status_code=400,
                 details=self.get_details(),
             )
-
-        if len(content) > 1:
-            logger.warning("Are you sure you want to process multiple rows?")
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(content.columns):
@@ -364,7 +361,7 @@ class AzureTable(
             self._submit_transaction(transaction, CreateError)
         except TableTransactionError as exc:
             raise CreateError(
-                message=exc.message, status_code=exc.status_code if exc.status_code else 500, details=self.get_details()
+                message=exc.message, status_code=getattr(exc, "status_code", 500), details=self.get_details()
             ) from exc
 
         except HttpResponseError as exc:

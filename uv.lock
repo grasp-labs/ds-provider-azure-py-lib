@@ -621,15 +621,15 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "azure-data-tables", specifier = "==12.6.0" },
-    { name = "azure-identity", specifier = "==1.19.0" },
-    { name = "azure-storage-blob", specifier = "==12.24.0" },
+    { name = "azure-data-tables", specifier = ">=12.0.0,<13.0.0" },
+    { name = "azure-identity", specifier = ">=1.0.0,<2.0.0" },
+    { name = "azure-storage-blob", specifier = ">=12.0.0,<13.0.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.9.3" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "ds-common-logger-py-lib", specifier = ">=0.1.0a5,<1.0.0" },
     { name = "ds-resource-plugin-py-lib", specifier = ">=0.1.0b1,<1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "pandas", specifier = ">=2.1.0,<3.0.0" },
+    { name = "pandas", specifier = ">=2.0.0,<3.0.0" },
     { name = "pandas-stubs", marker = "extra == 'dev'", specifier = ">=2.1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
