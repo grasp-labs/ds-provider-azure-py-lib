@@ -6,7 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "ds-provider-azure-py-lib"
 version = "0.1.0-alpha.1"
 description = "A Python package from the DS library collection"
-dependencies = []
+dependencies = [
+    "ds-resource-plugin-py-lib>=0.1.0-beta.1,<1.0.0",
+    "ds-common-logger-py-lib>=0.1.0-alpha.5,<1.0.0",
+    "azure-data-tables>=12.0.0,<13.0.0",
+    "azure-storage-blob>=12.0.0,<13.0.0",
+    "azure-identity>=1.0.0,<2.0.0",
+    "pandas>=2.0.0,<3.0.0",
+]
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE-APACHE"]
@@ -40,6 +47,7 @@ dev = [
     "bandit>=1.9.3",
     "ruff>=0.1.8",
     "mypy>=1.7.0",
+    "pandas-stubs>=2.1.0",
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.3.0",
@@ -65,7 +73,7 @@ docs = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-ds_provider_azure_py_lib = ["py.typed"]
+ds_provider_azure_py_lib = ["resource.yaml", "py.typed"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
