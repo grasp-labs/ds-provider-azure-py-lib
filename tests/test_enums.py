@@ -9,8 +9,6 @@ Covers:
 - Enum membership and comparison operations.
 """
 
-from __future__ import annotations
-
 from ds_provider_azure_py_lib.enums import ResourceType
 
 
