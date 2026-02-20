@@ -14,6 +14,7 @@ Prerequisites:
 - An Azure Storage account with a container named "test-container".
 - Blobs in the container with names starting with "test" and in CSV format.
 """
+
 import os
 import uuid
 
@@ -35,20 +36,17 @@ def main():
             blob_name="test.csv",
             # prefix="test",  # to read all blobs with this prefix (all of them must be in the format specified in deserializer), remove blob_name when using prefix
             create=CreateSettings(
-                overwrite_blob_if_exists=True, # if True, it will overwrite the blob if it already exists. If False, it will raise an error if the blob already exists. default is True.
-                new_container=True # if True, it will create a new container if the specified container does not exist. If False, it will raise an error if the container does not exist. default is True.
+                overwrite_blob_if_exists=True,  # if True, it will overwrite the blob if it already exists. If False, it will raise an error if the blob already exists. default is True.
+                new_container=True,  # if True, it will create a new container if the specified container does not exist. If False, it will raise an error if the container does not exist. default is True.
             ),
             delete=DeleteSettings(
-                delete_container=True # if True, it will delete the container, If False, it will only delete the blob. default is False.
+                delete_container=True  # if True, it will delete the container, If False, it will only delete the blob. default is False.
             ),
         ),
         serializer=PandasSerializer(format=DatasetStorageFormatType.JSON),
         deserializer=PandasDeserializer(format=DatasetStorageFormatType.CSV),
         linked_service=AzureLinkedService(
-            settings=AzureLinkedServiceSettings(
-                account_name=account_name,
-                access_key=account_key
-            ),
+            settings=AzureLinkedServiceSettings(account_name=account_name, access_key=account_key),
             id=uuid.uuid4(),
             name="testazurepackage",
             version="0.0.1",
@@ -57,7 +55,7 @@ def main():
         id=uuid.uuid4(),
         name="testazurepackage",
         version="0.0.1",
-        description="testazurepackage"
+        description="testazurepackage",
     )
     dataset.linked_service.connect()
     dataset.linked_service.test_connection()

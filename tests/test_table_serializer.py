@@ -215,6 +215,7 @@ class TestCoerceValue:
         result = _coerce_value(value)
         assert isinstance(result, str)
         assert result == "-PT86400.0S"  # -1 day = -86400 seconds
+
     def test_coerce_bytes_to_base64_string(self):
         """bytes should be converted to base64 string."""
         value = b"hello"
