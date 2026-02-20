@@ -186,6 +186,8 @@ class TestCoerceValue:
         result = _coerce_value(value)
         # numpy.datetime64 with time component converts to datetime.datetime
         assert isinstance(result, datetime)
+        # Ensure the resulting datetime is timezone-aware for Azure Table Storage
+        assert result.tzinfo is not None
 
     def test_coerce_timedelta_to_iso8601_string(self):
         """pd.Timedelta should be converted to ISO 8601 duration string."""
