@@ -49,7 +49,15 @@ def _coerce_for_json(value: Any) -> Any:  # noqa: PLR0912
             return _coerce_for_json(value.as_py())
 
     try:
-        if pd.isna(value):
+        na_result = pd.isna(value)
+        # Handle both scalar and array-like results
+        # For array-like, check size to avoid ambiguity warning
+        if hasattr(na_result, "size") and na_result.size > 0:
+            # For single-element arrays, check the value
+            if na_result.size == 1 and na_result.item():
+                return None
+        elif isinstance(na_result, bool) and na_result:
+            # For scalar bool results
             return None
     except (ValueError, TypeError):
         pass
@@ -123,7 +131,15 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
 
     # NA-like values (NaT, NaN, pd.NA) → None (property omitted from entity)
     try:
-        if pd.isna(value):
+        na_result = pd.isna(value)
+        # Handle both scalar and array-like results
+        # For array-like, check size to avoid ambiguity warning
+        if hasattr(na_result, "size") and na_result.size > 0:
+            # For single-element arrays, check the value
+            if na_result.size == 1 and na_result.item():
+                return None
+        elif isinstance(na_result, bool) and na_result:
+            # For scalar bool results
             return None
     except (ValueError, TypeError):
         pass
