@@ -1,5 +1,5 @@
 """
-**File**: coercion.py**
+**File:** coercion.py**
 **Region:** ``ds_provider_azure_py_lib/serde/coercion``
 
 Coercion functions to convert between pandas/numpy/pyarrow types and Azure Table Storage-compatible types.
@@ -45,7 +45,7 @@ def _coerce_for_json(value: Any) -> Any:  # noqa: PLR0912
 
     # PyArrow scalar → native Python type via .as_py()
     if hasattr(value, "as_py") and hasattr(value, "type"):
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(TypeError, ValueError, AttributeError):
             return _coerce_for_json(value.as_py())
 
     try:
@@ -89,7 +89,7 @@ def _coerce_for_json(value: Any) -> Any:  # noqa: PLR0912
         return base64.b64encode(value).decode("utf-8")
 
     # numpy/pyarrow scalar
-    if hasattr(value, "item"):
+    if hasattr(value, "item") and not isinstance(value, (bytes, memoryview)):
         return _coerce_for_json(value.item())
 
     # Large ints
@@ -113,7 +113,7 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
     # PyArrow scalar → native Python type via .as_py()
     # Check for PyArrow scalars first (they have type and as_py attributes)
     if hasattr(value, "as_py") and hasattr(value, "type"):
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(TypeError, ValueError, AttributeError):
             value = value.as_py()
 
     # numpy / pyarrow scalar → native Python type via .item()

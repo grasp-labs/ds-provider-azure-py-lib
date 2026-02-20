@@ -19,10 +19,10 @@ Prerequisites:
 - The `ds_provider_azure_py_lib` library should be installed and accessible in the Python environment.
 """
 
-import base64
+
 import os
 import uuid
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timezone
 
 import numpy as np
 import pandas as pd
@@ -147,7 +147,7 @@ def main():
         print(dataset.output)
 
     # Delete test
-    if not dataset.output.empty and len(dataset.output) > 0:
+    if not dataset.output.empty:
         print("\nTesting delete operation...")
         dataset.input = dataset.output.copy()
         dataset.delete()
