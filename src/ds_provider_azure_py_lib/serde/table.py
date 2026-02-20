@@ -1,4 +1,10 @@
-import json
+"""
+**File:** ``table.py``
+**Region:** ``ds_provider_azure_py_lib/serde/table``
+
+Serde for Azure Table Storage data.
+"""
+
 from typing import Any
 
 import pandas as pd
@@ -6,6 +12,8 @@ from azure.core.paging import ItemPaged
 from azure.data.tables import TableEntity
 from ds_resource_plugin_py_lib.common.serde.deserialize import DataDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import DataSerializer
+
+from ds_provider_azure_py_lib.serde.coercion import _coerce_value
 
 
 class AzureTableSerializer(DataSerializer):
@@ -30,11 +38,7 @@ class AzureTableSerializer(DataSerializer):
             RowKey=obj["RowKey"].astype(str),
             PartitionKey=obj["PartitionKey"].astype(str),
         )
-        entity = df.iloc[0].to_dict()
-        for key, value in entity.items():
-            if isinstance(value, dict):
-                entity[key] = json.dumps(value)
-        return entity
+        return {k: _coerce_value(v) for k, v in df.iloc[0].to_dict().items()}
 
 
 class AzureTableDeserializer(DataDeserializer):

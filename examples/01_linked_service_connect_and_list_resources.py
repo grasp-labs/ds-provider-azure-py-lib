@@ -10,6 +10,7 @@ This example demonstrates how to:
 - List all tables in the Table storage.
 - List all Blob containers in the storage account.
 """
+
 import os
 import uuid
 
@@ -28,7 +29,7 @@ def main():
         id=uuid.uuid4(),
         name="testazurepackage",
         version="0.0.1",
-        description="testazurepackage"
+        description="testazurepackage",
     )
 
     linked_service.connect()
@@ -53,6 +54,7 @@ def main():
             print(f"\nBlobs in {container_name} container:")
             for blob in blobs:
                 print(f" -{blob.name}")
+
 
 if __name__ == "__main__":
     main()
