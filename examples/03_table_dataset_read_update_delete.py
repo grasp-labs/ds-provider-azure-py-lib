@@ -48,7 +48,7 @@ def main():
         deserializer=AzureTableDeserializer(),
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
-            read=ReadSettings(query_filter="PartitionKey eq '1'"),
+            read=ReadSettings(query_filter="PartitionKey eq 'colors'"),
             delete=DeleteSettings(delete_table=False),  # Set to True to delete table after test
         ),
         linked_service=AzureLinkedService(

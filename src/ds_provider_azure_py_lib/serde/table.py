@@ -1,4 +1,9 @@
-""""""
+"""
+**File**:** ``table.py``
+**Region:** ``ds_provider_azure_py_lib/serde/table``
+
+Serde for Azure Table Storage data.
+"""
 
 from typing import Any
 

@@ -1,4 +1,12 @@
+"""
+**File**: coercion.py**
+**Region:** ``ds_provider_azure_py_lib/serde/coercion``
+
+Coercion functions to convert between pandas/numpy/pyarrow types and Azure Table Storage-compatible types.
+"""
+
 import base64
+import contextlib
 import json
 from datetime import date, datetime, time, timezone
 from typing import Any
@@ -34,6 +42,12 @@ def _coerce_for_json(value: Any) -> Any:  # noqa: PLR0912
 
     # For other types, apply the standard coercion logic
     # (but skip the top-level list/tuple/dict checks to avoid recursion)
+
+    # PyArrow scalar → native Python type via .as_py()
+    if hasattr(value, "as_py") and hasattr(value, "type"):
+        with contextlib.suppress(Exception):
+            return _coerce_for_json(value.as_py())
+
     try:
         if pd.isna(value):
             return None
@@ -96,6 +110,17 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
     Returns:
         A value that the Azure Table SDK can serialize.
     """
+    # PyArrow scalar → native Python type via .as_py()
+    # Check for PyArrow scalars first (they have type and as_py attributes)
+    if hasattr(value, "as_py") and hasattr(value, "type"):
+        with contextlib.suppress(Exception):
+            value = value.as_py()
+
+    # numpy / pyarrow scalar → native Python type via .item()
+    # Do this FIRST before any other checks to ensure proper type handling
+    if hasattr(value, "item") and not isinstance(value, (bytes, memoryview)):
+        value = value.item()
+
     # NA-like values (NaT, NaN, pd.NA) → None (property omitted from entity)
     try:
         if pd.isna(value):
@@ -143,21 +168,11 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
     if isinstance(value, bytes):
         return base64.b64encode(value).decode("utf-8")
 
-    # numpy / pyarrow scalar → native Python type via .item()
-    if hasattr(value, "item"):
-        value = value.item()
-
     # After scalar unboxing, handle datetime objects (e.g., from numpy.datetime64)
     if isinstance(value, datetime) and value.tzinfo is None:
         # Localize naive datetime to UTC
         return value.replace(tzinfo=timezone.utc)
 
-    # After scalar unboxing, ensure date/time objects are serialized as ISO strings
-    if isinstance(value, date) and not isinstance(value, datetime):
-        return value.isoformat()
-
-    if isinstance(value, time):
-        return value.isoformat()
     # Large ints that overflow Azure Table's default Int32 → explicit Int64
     if isinstance(value, int) and not isinstance(value, bool) and (value < _INT32_MIN or value > _INT32_MAX):
         return (value, EdmType.INT64)

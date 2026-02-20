@@ -19,6 +19,7 @@ from datetime import date, datetime, time, timezone
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from azure.data.tables import EdmType
 
 from ds_provider_azure_py_lib.serde.coercion import _coerce_value
@@ -453,6 +454,196 @@ class TestCoerceValue:
         assert parsed[1] == 100
         assert parsed[2] == [-3_000_000_000, "EdmType.INT64"]
 
+    # ========== PyArrow Scalar Tests ==========
+
+    def test_coerce_pyarrow_int64_to_native_int(self):
+        """PyArrow int64 scalar should be converted to native int."""
+        value = pa.scalar(42, type=pa.int64())
+        result = _coerce_value(value)
+        assert result == 42
+        assert isinstance(result, int)
+        assert not isinstance(result, pa.Scalar)
+
+    def test_coerce_pyarrow_int32_to_native_int(self):
+        """PyArrow int32 scalar should be converted to native int."""
+        value = pa.scalar(100, type=pa.int32())
+        result = _coerce_value(value)
+        assert result == 100
+        assert isinstance(result, int)
+
+    def test_coerce_pyarrow_float64_to_native_float(self):
+        """PyArrow float64 scalar should be converted to native float."""
+        value = pa.scalar(3.14, type=pa.float64())
+        result = _coerce_value(value)
+        assert result == 3.14
+        assert isinstance(result, float)
+        assert not isinstance(result, pa.Scalar)
+
+    def test_coerce_pyarrow_float32_to_native_float(self):
+        """PyArrow float32 scalar should be converted to native float."""
+        value = pa.scalar(2.71, type=pa.float32())
+        result = _coerce_value(value)
+        # Float32 may have slight precision differences, so use approximate comparison
+        assert abs(result - 2.71) < 0.01
+        assert isinstance(result, float)
+
+    def test_coerce_pyarrow_bool_to_native_bool(self):
+        """PyArrow bool scalar should be converted to native bool."""
+        value = pa.scalar(True, type=pa.bool_())
+        result = _coerce_value(value)
+        assert result is True
+        assert isinstance(result, bool)
+        assert not isinstance(result, pa.Scalar)
+
+    def test_coerce_pyarrow_bool_false_to_native_bool(self):
+        """PyArrow bool(False) scalar should be converted to native bool."""
+        value = pa.scalar(False, type=pa.bool_())
+        result = _coerce_value(value)
+        assert result is False
+        assert isinstance(result, bool)
+
+    def test_coerce_pyarrow_string_to_native_string(self):
+        """PyArrow string scalar should be converted to native string."""
+        value = pa.scalar("hello", type=pa.string())
+        result = _coerce_value(value)
+        assert result == "hello"
+        assert isinstance(result, str)
+
+    def test_coerce_pyarrow_binary_to_base64(self):
+        """PyArrow binary scalar should be converted to base64 string."""
+        value = pa.scalar(b"hello", type=pa.binary())
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        assert result == base64.b64encode(b"hello").decode("utf-8")
+        assert result == "aGVsbG8="
+
+    def test_coerce_pyarrow_timestamp_to_datetime(self):
+        """PyArrow timestamp scalar should be converted to native datetime."""
+        value = pa.scalar(pd.Timestamp("2024-01-15 10:30:00"), type=pa.timestamp("us"))
+        result = _coerce_value(value)
+        assert isinstance(result, datetime)
+        # PyArrow timestamp conversions should result in tz-aware datetime
+        assert result.tzinfo is not None or result.year == 2024
+
+    def test_coerce_pyarrow_date32_to_date_string(self):
+        """PyArrow date32 scalar should be converted to date string via .item()."""
+        value = pa.scalar(date(2024, 1, 15), type=pa.date32())
+        result = _coerce_value(value)
+        # After .item() converts to Python date, should be converted to ISO string
+        assert isinstance(result, str)
+        assert result == "2024-01-15"
+
+    def test_coerce_pyarrow_date64_to_date_string(self):
+        """PyArrow date64 scalar should be converted to date string."""
+        value = pa.scalar(date(2024, 1, 15), type=pa.date64())
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        assert result == "2024-01-15"
+
+    def test_coerce_pyarrow_large_int64_positive(self):
+        """PyArrow large positive int64 should be wrapped as (value, EdmType.INT64)."""
+        value = pa.scalar(3_000_000_000, type=pa.int64())
+        result = _coerce_value(value)
+        assert isinstance(result, tuple)
+        assert result[0] == 3_000_000_000
+        assert result[1] == EdmType.INT64
+
+    def test_coerce_pyarrow_large_int64_negative(self):
+        """PyArrow large negative int64 should be wrapped as (value, EdmType.INT64)."""
+        value = pa.scalar(-3_000_000_000, type=pa.int64())
+        result = _coerce_value(value)
+        assert isinstance(result, tuple)
+        assert result[0] == -3_000_000_000
+        assert result[1] == EdmType.INT64
+
+    def test_coerce_pyarrow_null_scalar_to_none(self):
+        """PyArrow null scalar should be converted to None."""
+        value = pa.scalar(None, type=pa.int64())
+        result = _coerce_value(value)
+        assert result is None
+
+    def test_coerce_pyarrow_utf8_string(self):
+        """PyArrow utf8 string scalar should be converted to native string."""
+        value = pa.scalar("test", type=pa.utf8())
+        result = _coerce_value(value)
+        assert result == "test"
+        assert isinstance(result, str)
+
+    def test_coerce_pyarrow_large_string(self):
+        """PyArrow large_string scalar should be converted to native string."""
+        value = pa.scalar("long text", type=pa.large_string())
+        result = _coerce_value(value)
+        assert result == "long text"
+        assert isinstance(result, str)
+
+    def test_coerce_pyarrow_uint64_to_native_int(self):
+        """PyArrow uint64 scalar should be converted to native int."""
+        value = pa.scalar(100, type=pa.uint64())
+        result = _coerce_value(value)
+        assert result == 100
+        assert isinstance(result, int)
+
+    def test_coerce_pyarrow_uint32_to_native_int(self):
+        """PyArrow uint32 scalar should be converted to native int."""
+        value = pa.scalar(50, type=pa.uint32())
+        result = _coerce_value(value)
+        assert result == 50
+        assert isinstance(result, int)
+
+    def test_coerce_list_with_pyarrow_scalars(self):
+        """list containing PyArrow scalars should be recursively coerced."""
+        value = [
+            pa.scalar(42, type=pa.int64()),
+            pa.scalar(3.14, type=pa.float64()),
+            pa.scalar(True, type=pa.bool_()),
+        ]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == [42, 3.14, True]
+
+    def test_coerce_dict_with_pyarrow_scalars(self):
+        """dict containing PyArrow scalars should be recursively coerced."""
+        value = {
+            "count": pa.scalar(100, type=pa.int64()),
+            "ratio": pa.scalar(0.95, type=pa.float64()),
+            "active": pa.scalar(True, type=pa.bool_()),
+        }
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == {"count": 100, "ratio": 0.95, "active": True}
+
+    def test_coerce_list_with_mixed_numpy_and_pyarrow_scalars(self):
+        """list with both numpy and PyArrow scalars should be coerced."""
+        value = [
+            np.int64(42),
+            pa.scalar(100, type=pa.int64()),
+            np.float64(3.14),
+            pa.scalar(2.71, type=pa.float64()),
+        ]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed[0] == 42
+        assert parsed[1] == 100
+        assert abs(parsed[2] - 3.14) < 0.01
+        assert abs(parsed[3] - 2.71) < 0.01
+
+    def test_coerce_pyarrow_int8_small_value(self):
+        """PyArrow int8 scalar should be converted to native int."""
+        value = pa.scalar(100, type=pa.int8())
+        result = _coerce_value(value)
+        assert result == 100
+        assert isinstance(result, int)
+
+    def test_coerce_pyarrow_int16_small_value(self):
+        """PyArrow int16 scalar should be converted to native int."""
+        value = pa.scalar(1000, type=pa.int16())
+        result = _coerce_value(value)
+        assert result == 1000
+        assert isinstance(result, int)
+
 
 class TestAzureTableSerializer:
     """Test the AzureTableSerializer class."""
@@ -714,3 +905,148 @@ class TestAzureTableSerializer:
         result = serializer(df, unused_arg="ignored", another="also_ignored")
 
         assert result["Value"] == 42
+
+    # ========== PyArrow Scalar Tests in Serializer ==========
+
+    def test_serialize_dataframe_with_pyarrow_scalars(self):
+        """Serializer should convert PyArrow scalars to native types."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "Count": pa.scalar(42, type=pa.int64()),
+                    "Ratio": pa.scalar(3.14, type=pa.float64()),
+                    "Flag": pa.scalar(True, type=pa.bool_()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert result["Count"] == 42
+        assert isinstance(result["Count"], int)
+        assert result["Ratio"] == 3.14
+        assert isinstance(result["Ratio"], float)
+        assert result["Flag"] is True
+        assert isinstance(result["Flag"], bool)
+
+    def test_serialize_dataframe_with_pyarrow_large_int(self):
+        """Serializer should wrap PyArrow large integers as (value, EdmType.INT64)."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "BigID": pa.scalar(9_999_999_999, type=pa.int64()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert isinstance(result["BigID"], tuple)
+        assert result["BigID"][0] == 9_999_999_999
+        assert result["BigID"][1] == EdmType.INT64
+
+    def test_serialize_dataframe_with_pyarrow_string(self):
+        """Serializer should handle PyArrow string scalars."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "Message": pa.scalar("hello world", type=pa.string()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert result["Message"] == "hello world"
+        assert isinstance(result["Message"], str)
+
+    def test_serialize_dataframe_with_pyarrow_binary(self):
+        """Serializer should convert PyArrow binary to base64."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "Data": pa.scalar(b"test", type=pa.binary()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert isinstance(result["Data"], str)
+        assert result["Data"] == base64.b64encode(b"test").decode("utf-8")
+
+    def test_serialize_dataframe_with_pyarrow_null(self):
+        """Serializer should convert PyArrow null scalar to None."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "Optional": pa.scalar(None, type=pa.int64()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert result["Optional"] is None
+
+    def test_serialize_dataframe_with_mixed_numpy_and_pyarrow_scalars(self):
+        """Serializer should handle both numpy and PyArrow scalars."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "NumpyInt": np.int64(100),
+                    "PyArrowInt": pa.scalar(200, type=pa.int64()),
+                    "NumpyFloat": np.float64(1.5),
+                    "PyArrowFloat": pa.scalar(2.5, type=pa.float64()),
+                    "NumpyBool": np.bool_(True),
+                    "PyArrowBool": pa.scalar(False, type=pa.bool_()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert result["NumpyInt"] == 100
+        assert isinstance(result["NumpyInt"], int)
+        assert result["PyArrowInt"] == 200
+        assert isinstance(result["PyArrowInt"], int)
+        assert result["NumpyFloat"] == 1.5
+        assert isinstance(result["NumpyFloat"], float)
+        assert result["PyArrowFloat"] == 2.5
+        assert isinstance(result["PyArrowFloat"], float)
+        assert result["NumpyBool"] is True
+        assert isinstance(result["NumpyBool"], bool)
+        assert result["PyArrowBool"] is False
+        assert isinstance(result["PyArrowBool"], bool)
+
+    def test_serialize_dataframe_with_pyarrow_uint_types(self):
+        """Serializer should convert PyArrow unsigned integer types."""
+        df = pd.DataFrame(
+            [
+                {
+                    "PartitionKey": "pk1",
+                    "RowKey": "rk1",
+                    "UInt32": pa.scalar(500, type=pa.uint32()),
+                    "UInt64": pa.scalar(1000, type=pa.uint64()),
+                }
+            ]
+        )
+        serializer = AzureTableSerializer()
+        result = serializer(df)
+
+        assert result["UInt32"] == 500
+        assert isinstance(result["UInt32"], int)
+        assert result["UInt64"] == 1000
+        assert isinstance(result["UInt64"], int)
