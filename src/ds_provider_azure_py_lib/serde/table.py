@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Any
 from uuid import UUID
 
@@ -50,10 +50,7 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
         seconds = value.total_seconds()
         sign = "-" if seconds < 0 else ""
         seconds = abs(seconds)
-        if seconds.is_integer():
-            seconds_str = str(int(seconds))
-        else:
-            seconds_str = str(seconds)
+        seconds_str = str(int(seconds)) if seconds.is_integer() else str(seconds)
         return f"{sign}PT{seconds_str}S"
 
     # UUID → string representation
@@ -75,6 +72,11 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
     # numpy / pyarrow scalar → native Python type via .item()
     if hasattr(value, "item"):
         value = value.item()
+
+    # After scalar unboxing, handle datetime objects (e.g., from numpy.datetime64)
+    if isinstance(value, datetime) and value.tzinfo is None:
+        # Localize naive datetime to UTC
+        return value.replace(tzinfo=timezone.utc)
 
     # After scalar unboxing, ensure date/time objects are serialized as ISO strings
     if isinstance(value, date) and not isinstance(value, datetime):

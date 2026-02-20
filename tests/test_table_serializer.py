@@ -194,27 +194,27 @@ class TestCoerceValue:
         value = pd.Timedelta("1 days")
         result = _coerce_value(value)
         assert isinstance(result, str)
-        assert result == "PT86400.0S"  # 1 day = 86400 seconds
+        assert result == "PT86400S"  # 1 day = 86400 seconds
 
     def test_coerce_timedelta_zero(self):
-        """pd.Timedelta of zero should be converted to PT0S."""
+        """pd.Timedelta of zero should be converted to PTS."""
         value = pd.Timedelta("0 days")
         result = _coerce_value(value)
-        assert result == "PT0.0S"
+        assert result == "PT0S"
 
     def test_coerce_timedelta_hours(self):
         """pd.Timedelta with hours should be converted correctly."""
         value = pd.Timedelta(hours=2)
         result = _coerce_value(value)
         assert isinstance(result, str)
-        assert result == "PT7200.0S"  # 2 hours = 7200 seconds
+        assert result == "PT7200S"  # 2 hours = 7200 seconds
 
     def test_coerce_negative_timedelta_to_iso8601_string(self):
         """Negative pd.Timedelta should be converted to ISO 8601 duration with leading '-'."""
         value = pd.Timedelta("-1 days")
         result = _coerce_value(value)
         assert isinstance(result, str)
-        assert result == "-PT86400.0S"  # -1 day = -86400 seconds
+        assert result == "-PT86400S"  # -1 day = -86400 seconds
 
     def test_coerce_bytes_to_base64_string(self):
         """bytes should be converted to base64 string."""
