@@ -21,9 +21,71 @@ _INT32_MAX = 2**31 - 1
 
 def _coerce_for_json(value: Any) -> Any:  # noqa: PLR0912
     """
-    Recursively coerce a value to be JSON-serializable.
+    Recursively coerce a value into a JSON-serializable form.
 
-    Handles nested structures (lists, dicts) by coercing their contents.
+    This helper is intended for preparing values to be passed to ``json.dumps``.
+    It preserves the overall structure of the input while converting unsupported
+    types into JSON-friendly representations. Containers (lists, tuples, and
+    dicts) are processed recursively.
+
+    Args:
+        value: Any Python, pandas, NumPy, or PyArrow value to coerce. May be a
+            scalar (e.g. ``int``, ``str``, ``pd.Timestamp``), a container
+            (``list``, ``tuple``, ``dict``), or a library-specific scalar
+            (e.g. ``numpy.scalar``, ``pyarrow.Scalar``, ``pd.Timedelta``).
+
+    Returns:
+        A JSON-serializable value with the same logical content as ``value``,
+        where:
+
+        * ``None`` and pandas/NumPy/pyarrow missing values are returned as
+          ``None``.
+        * ``list`` and ``tuple`` inputs become lists whose elements have been
+          recursively coerced.
+        * ``dict`` inputs become dicts whose values have been recursively
+          coerced.
+        * ``pyarrow`` scalars are converted via ``.as_py()`` and then coerced
+          again.
+        * ``numpy`` scalars are converted via ``.item()`` and then coerced
+          again.
+        * ``pd.Timestamp`` values are converted to ISO 8601 strings, with
+          timezone-naive timestamps localized to UTC before conversion.
+        * ``pd.Timedelta`` values are converted to ISO 8601 duration strings
+          of the form ``"PT<seconds>S"`` (including a leading ``-`` for
+          negative values).
+        * ``uuid.UUID``, :class:`datetime.date`, :class:`datetime.datetime`,
+          and :class:`datetime.time` values are converted to their ISO format
+          string representations.
+        * ``bytes`` values are base64-encoded and returned as UTF-8 strings.
+        * Integer values outside the 32-bit signed range are returned as
+          ``[value, "EdmType.INT64"]`` to preserve precision when encoded as
+          JSON.
+        * All other values are returned unchanged.
+
+    Examples:
+        Basic scalar coercion:
+
+        >>> _coerce_for_json(42)
+        42
+        >>> _coerce_for_json(None)
+        None
+
+        Large integer (outside 32-bit range) is wrapped for INT64 handling:
+
+        >>> _coerce_for_json(2**40)
+        [1099511627776, "EdmType.INT64"]
+
+        Timestamp and date/time coercion:
+
+        >>> _coerce_for_json(pd.Timestamp("2024-01-01T00:00:00Z"))
+        '2024-01-01T00:00:00+00:00'
+        >>> _coerce_for_json(datetime(2024, 1, 1, 12, 0, 0))
+        '2024-01-01T12:00:00'
+
+        Bytes and nested structures:
+
+        >>> _coerce_for_json({"data": b"hello", "ids": (1, 2, 3)})
+        {'data': 'aGVsbG8=', 'ids': [1, 2, 3]}
     """
     if value is None:
         return None
