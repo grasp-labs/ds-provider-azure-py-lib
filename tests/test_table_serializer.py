@@ -136,6 +136,51 @@ class TestCoerceForJson:
             result = _coerce_for_json(test_value)
             assert result is None
 
+    def test_coerce_for_json_array_like_pd_isna_result_false(self):
+        """Array-like pd.isna result with False should not return None."""
+        # Mock pd.isna to return an array of False (single-element)
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return a numpy array with False
+            mock_isna.return_value = np.array([False])
+
+            test_value = "test"
+            result = _coerce_for_json(test_value)
+            # Should continue to other checks and eventually return the string
+            assert result == "test"
+
+    def test_coerce_for_json_array_like_pd_isna_result_empty(self):
+        """Array-like pd.isna result with empty array should not return None."""
+        # Mock pd.isna to return an empty array
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return an empty numpy array - size == 0, so condition is False
+            mock_isna.return_value = np.array([])
+
+            test_value = 42
+            result = _coerce_for_json(test_value)
+            # Should continue since array is empty
+            assert result == 42
+
+    def test_coerce_for_json_scalar_bool_true(self):
+        """Scalar bool True from pd.isna should return None in _coerce_for_json."""
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return scalar True directly (not an array)
+            mock_isna.return_value = True
+
+            test_value = "some_value"
+            result = _coerce_for_json(test_value)
+            assert result is None
+
+    def test_coerce_for_json_scalar_bool_false(self):
+        """Scalar bool False from pd.isna should not return None and continue in _coerce_for_json."""
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return scalar False
+            mock_isna.return_value = False
+
+            test_value = "test_string"
+            result = _coerce_for_json(test_value)
+            # Should continue and return the string unchanged
+            assert result == "test_string"
+
     def test_coerce_for_json_datetime_isoformat(self):
         """datetime object should be converted to ISO format string via _coerce_for_json."""
         value = datetime(2024, 1, 15, 10, 30, 45, tzinfo=timezone.utc)
@@ -216,27 +261,50 @@ class TestCoerceValue:
             result = _coerce_value(test_value)
             assert result is None
 
-    def test_coerce_value_elif_scalar_isna_true_branch(self):
-        """Test the elif branch: scalar True from pd.isna without size attribute."""
-        # The elif branch (line 144-145) requires:
-        # 1. not hasattr(na_result, 'size') -> True (scalar, not array)
-        # 2. na_result -> True (the actual value is True)
-
-        # Use a string - it doesn't have .item() so it skips line 130
-        # and reaches the pd.isna check
+    def test_coerce_value_array_like_pd_isna_result_false(self):
+        """Array-like pd.isna result with False should not return None."""
+        # Mock pd.isna to return an array of False (single-element)
         with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
-            # Return scalar True (bool without 'size' attribute)
+            # Return a numpy array with False
+            mock_isna.return_value = np.array([False])
+
+            test_value = "test_value"
+            result = _coerce_value(test_value)
+            # Should continue to other checks and eventually return the string
+            assert result == "test_value"
+
+    def test_coerce_value_array_like_pd_isna_result_empty(self):
+        """Array-like pd.isna result with empty array should not return None."""
+        # Mock pd.isna to return an empty array
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return an empty numpy array - size == 0, so condition is False
+            mock_isna.return_value = np.array([])
+
+            test_value = 42
+            result = _coerce_value(test_value)
+            # Should continue since array is empty
+            assert result == 42
+
+    def test_coerce_value_scalar_bool_true(self):
+        """Scalar bool True from pd.isna should return None in _coerce_value."""
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return scalar True directly (not an array)
             mock_isna.return_value = True
 
-            # A string doesn't have .item() and won't match other handlers
-            test_value = "test_string_value"
+            test_value = "some_value"
             result = _coerce_value(test_value)
-
-            # Should return None because pd.isna returned True
             assert result is None
 
-            # Verify our mock was called
-            mock_isna.assert_called_once_with(test_value)
+    def test_coerce_value_scalar_bool_false(self):
+        """Scalar bool False from pd.isna should not return None and continue in _coerce_value."""
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return scalar False
+            mock_isna.return_value = False
+
+            test_value = "test_string"
+            result = _coerce_value(test_value)
+            # Should continue and return the string unchanged
+            assert result == "test_string"
 
     def test_coerce_value_exception_in_pd_isna_handler(self):
         """Exception handler in pd.isna should catch ValueError and TypeError in _coerce_value."""
