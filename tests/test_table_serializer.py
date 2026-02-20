@@ -21,7 +21,8 @@ import numpy as np
 import pandas as pd
 from azure.data.tables import EdmType
 
-from ds_provider_azure_py_lib.serde.table import AzureTableSerializer, _coerce_value
+from ds_provider_azure_py_lib.serde.coercion import _coerce_value
+from ds_provider_azure_py_lib.serde.table import AzureTableSerializer
 
 
 class TestCoerceValue:
@@ -304,6 +305,153 @@ class TestCoerceValue:
         result = _coerce_value(value)
         assert isinstance(result, str)
         assert json.loads(result) == [1, {"key": "value"}, 3]
+
+    def test_coerce_list_with_numpy_scalars(self):
+        """list containing numpy scalars should be recursively coerced and JSON-serialized."""
+        value = [np.int64(1), np.float64(2.5), np.bool_(True)]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        assert json.loads(result) == [1, 2.5, True]
+
+    def test_coerce_list_with_timestamps(self):
+        """list containing pd.Timestamp should be recursively coerced to ISO datetime strings."""
+        value = [pd.Timestamp("2024-01-15 10:30:00"), "text", 42]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert len(parsed) == 3
+        # Timestamp converted to ISO format string
+        assert isinstance(parsed[0], str)
+        assert "2024-01-15" in parsed[0]
+        assert parsed[1] == "text"
+        assert parsed[2] == 42
+
+    def test_coerce_list_with_uuid(self):
+        """list containing UUID should be recursively coerced to string."""
+        test_uuid = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+        value = [test_uuid, "data"]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed[0] == "550e8400-e29b-41d4-a716-446655440000"
+        assert parsed[1] == "data"
+
+    def test_coerce_list_with_bytes(self):
+        """list containing bytes should be recursively coerced to base64 strings."""
+        value = [b"hello", b"world"]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == ["aGVsbG8=", "d29ybGQ="]
+
+    def test_coerce_list_with_timedeltas(self):
+        """list containing pd.Timedelta should be recursively coerced to ISO duration strings."""
+        value = [pd.Timedelta("1 days"), pd.Timedelta(hours=2)]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == ["PT86400S", "PT7200S"]
+
+    def test_coerce_list_with_dates_and_times(self):
+        """list containing date and time objects should be recursively coerced to ISO strings."""
+        value = [date(2024, 1, 15), time(10, 30, 45)]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == ["2024-01-15", "10:30:45"]
+
+    def test_coerce_dict_with_numpy_scalars(self):
+        """dict containing numpy scalars should be recursively coerced and JSON-serialized."""
+        value = {"count": np.int64(100), "ratio": np.float64(0.95), "active": np.bool_(True)}
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == {"count": 100, "ratio": 0.95, "active": True}
+
+    def test_coerce_dict_with_timestamp(self):
+        """dict containing pd.Timestamp should be recursively coerced."""
+        value = {"created": pd.Timestamp("2024-01-15 10:30:00"), "name": "test"}
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert "2024-01-15" in parsed["created"]
+        assert parsed["name"] == "test"
+
+    def test_coerce_dict_with_uuid(self):
+        """dict containing UUID should be recursively coerced to string."""
+        test_uuid = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+        value = {"id": test_uuid, "status": "active"}
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed["id"] == "550e8400-e29b-41d4-a716-446655440000"
+        assert parsed["status"] == "active"
+
+    def test_coerce_dict_with_bytes(self):
+        """dict containing bytes should be recursively coerced to base64 strings."""
+        value = {"data": b"hello", "image": b"image_bytes"}
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed == {"data": "aGVsbG8=", "image": "aW1hZ2VfYnl0ZXM="}
+
+    def test_coerce_deeply_nested_structure(self):
+        """deeply nested structure with mixed types should be recursively coerced."""
+        value = {
+            "metadata": {
+                "ids": [uuid.UUID("550e8400-e29b-41d4-a716-446655440000")],
+                "timestamps": [pd.Timestamp("2024-01-15")],
+                "counts": [np.int64(42)],
+            },
+            "binary": b"data",
+            "array": [
+                {"nested_id": uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")},
+                {"nested_int": np.int64(100)},
+            ],
+        }
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+
+        # Verify nested structure is properly coerced
+        assert parsed["binary"] == base64.b64encode(b"data").decode("utf-8")
+        assert parsed["metadata"]["ids"][0] == "550e8400-e29b-41d4-a716-446655440000"
+        assert "2024-01-15" in parsed["metadata"]["timestamps"][0]
+        assert parsed["metadata"]["counts"][0] == 42
+        assert parsed["array"][0]["nested_id"] == "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        assert parsed["array"][1]["nested_int"] == 100
+
+    def test_coerce_list_with_nat_and_nan(self):
+        """list containing NaT and NaN should be recursively coerced to None."""
+        value = [pd.NaT, float("nan"), "valid", np.int64(42)]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed[0] is None
+        assert parsed[1] is None
+        assert parsed[2] == "valid"
+        assert parsed[3] == 42
+
+    def test_coerce_dict_with_na_values(self):
+        """dict containing NA values should be recursively coerced to None."""
+        value = {"nat": pd.NaT, "nan": float("nan"), "name": "test"}
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        assert parsed["nat"] is None
+        assert parsed["nan"] is None
+        assert parsed["name"] == "test"
+
+    def test_coerce_list_with_large_integers(self):
+        """list containing large integers should be recursively coerced."""
+        value = [np.int64(9_999_999_999), 100, np.int64(-3_000_000_000)]
+        result = _coerce_value(value)
+        assert isinstance(result, str)
+        parsed = json.loads(result)
+        # Large ints are represented as [value, "EdmType.INT64"] in JSON
+        assert parsed[0] == [9_999_999_999, "EdmType.INT64"]
+        assert parsed[1] == 100
+        assert parsed[2] == [-3_000_000_000, "EdmType.INT64"]
 
 
 class TestAzureTableSerializer:
