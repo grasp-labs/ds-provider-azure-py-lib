@@ -7,11 +7,9 @@ Unit tests for AzureTableSerializer and _coerce_value function.
 Covers:
 - Handling of pandas missing values (NaT, NaN, pd.NA)
 - Conversion of numpy scalars to native Python types
-- Conversion of pyarrow scalars to native Python types
 - Handling of large integers that overflow Int32
 - Handling of tz-naive and tz-aware timestamps
 - Handling of nested dicts
-- Round-trip serialization
 """
 
 import base64

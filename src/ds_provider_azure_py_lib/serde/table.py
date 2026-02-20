@@ -47,7 +47,14 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
 
     # pd.Timedelta → ISO 8601 duration string (e.g., "PT86400S" for 1 day)
     if isinstance(value, pd.Timedelta):
-        return f"PT{value.total_seconds()}S"
+        seconds = value.total_seconds()
+        sign = "-" if seconds < 0 else ""
+        seconds = abs(seconds)
+        if seconds.is_integer():
+            seconds_str = str(int(seconds))
+        else:
+            seconds_str = str(seconds)
+        return f"{sign}PT{seconds_str}S"
 
     # UUID → string representation
     if isinstance(value, UUID):
@@ -69,6 +76,12 @@ def _coerce_value(value: Any) -> Any:  # noqa: PLR0912
     if hasattr(value, "item"):
         value = value.item()
 
+    # After scalar unboxing, ensure date/time objects are serialized as ISO strings
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value.isoformat()
+
+    if isinstance(value, time):
+        return value.isoformat()
     # Large ints that overflow Azure Table's default Int32 → explicit Int64
     if isinstance(value, int) and not isinstance(value, bool) and (value < _INT32_MIN or value > _INT32_MAX):
         return (value, EdmType.INT64)
