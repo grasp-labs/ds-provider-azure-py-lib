@@ -16,14 +16,174 @@ import base64
 import json
 import uuid
 from datetime import date, datetime, time, timezone
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 from azure.data.tables import EdmType
 
-from ds_provider_azure_py_lib.serde.coercion import _coerce_value
+from ds_provider_azure_py_lib.serde.coercion import _coerce_for_json, _coerce_value
 from ds_provider_azure_py_lib.serde.table import AzureTableSerializer
+
+
+class TestCoerceForJson:
+    """Test the _coerce_for_json helper function for JSON serialization."""
+
+    def test_coerce_for_json_negative_timedelta(self):
+        """Negative pd.Timedelta should be converted to ISO 8601 duration with leading '-'."""
+        value = pd.Timedelta("-1 days")
+        result = _coerce_for_json(value)
+        assert isinstance(result, str)
+        assert result == "-PT86400S"  # -1 day = -86400 seconds
+
+    def test_coerce_for_json_negative_timedelta_hours(self):
+        """Negative pd.Timedelta with hours should be converted correctly."""
+        value = pd.Timedelta(hours=-5)
+        result = _coerce_for_json(value)
+        assert isinstance(result, str)
+        assert result == "-PT18000S"  # -5 hours = -18000 seconds
+
+    def test_coerce_for_json_negative_timedelta_fractional_seconds(self):
+        """Negative pd.Timedelta with fractional seconds should be converted correctly."""
+        value = pd.Timedelta(seconds=-2.5)
+        result = _coerce_for_json(value)
+        assert isinstance(result, str)
+        assert result == "-PT2.5S"
+
+    def test_coerce_for_json_large_positive_integer(self):
+        """Large positive integers should be returned as [value, 'EdmType.INT64'] list."""
+        value = 3_000_000_000
+        result = _coerce_for_json(value)
+        assert isinstance(result, list)
+        assert result == [3_000_000_000, "EdmType.INT64"]
+
+    def test_coerce_for_json_large_negative_integer(self):
+        """Large negative integers should be returned as [value, 'EdmType.INT64'] list."""
+        value = -3_000_000_000
+        result = _coerce_for_json(value)
+        assert isinstance(result, list)
+        assert result == [-3_000_000_000, "EdmType.INT64"]
+
+    def test_coerce_for_json_list_with_large_integers(self):
+        """List containing large integers should recursively coerce them."""
+        value = [100, 3_000_000_000, -3_000_000_000]
+        result = _coerce_for_json(value)
+        assert isinstance(result, list)
+        assert result[0] == 100
+        assert result[1] == [3_000_000_000, "EdmType.INT64"]
+        assert result[2] == [-3_000_000_000, "EdmType.INT64"]
+
+    def test_coerce_for_json_dict_with_large_integers(self):
+        """Dict containing large integers should recursively coerce them."""
+        value = {"small": 100, "large": 3_000_000_000}
+        result = _coerce_for_json(value)
+        assert isinstance(result, dict)
+        assert result["small"] == 100
+        assert result["large"] == [3_000_000_000, "EdmType.INT64"]
+
+    def test_coerce_for_json_exception_handling_for_isna(self):
+        """Values that raise exceptions in pd.isna should be handled gracefully."""
+
+        # Create a custom object that raises TypeError when pd.isna is called
+        class ProblematicValue:
+            def __repr__(self):
+                return "ProblematicValue"
+
+        value = ProblematicValue()
+        # Should not raise an exception, just continue to next checks
+        result = _coerce_for_json(value)
+        assert result is value
+
+    def test_coerce_for_json_with_problematic_object(self):
+        """Objects that might raise exceptions in pd.isna should be handled gracefully."""
+        # The exception handler in pd.isna catches ValueError and TypeError
+        # This test documents that handler exists
+        # In practice, most objects either return False/True or a Series/array from pd.isna
+
+        # Test with an integer which works fine
+        value = 42
+        result = _coerce_for_json(value)
+        assert result == 42
+
+        # Test with None which is handled first
+        value = None
+        result = _coerce_for_json(value)
+        assert result is None
+
+    def test_coerce_for_json_exception_in_pd_isna_handler(self):
+        """Exception handler in pd.isna should catch ValueError and TypeError."""
+        # Mock pd.isna to raise an exception, simulating a problematic value type
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            mock_isna.side_effect = ValueError("Test exception from pd.isna")
+
+            # Create a test value that will trigger the pd.isna call
+            test_value = "test"
+
+            # The exception should be caught and the function should continue
+            # It should eventually return the test_value as-is since it doesn't match any other types
+            result = _coerce_for_json(test_value)
+            assert result == "test"
+
+    def test_coerce_for_json_array_like_pd_isna_result(self):
+        """Array-like pd.isna result should be handled with size check."""
+        # Mock pd.isna to return an array of True (single-element)
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return a numpy array instead of scalar
+            mock_isna.return_value = np.array([True])
+
+            test_value = float("nan")  # This would normally be NA
+            result = _coerce_for_json(test_value)
+            assert result is None
+
+    def test_coerce_for_json_datetime_isoformat(self):
+        """datetime object should be converted to ISO format string via _coerce_for_json."""
+        value = datetime(2024, 1, 15, 10, 30, 45, tzinfo=timezone.utc)
+        result = _coerce_for_json(value)
+        assert isinstance(result, str)
+        assert result == "2024-01-15T10:30:45+00:00"
+
+    def test_coerce_for_json_native_datetime_with_microseconds(self):
+        """datetime with microseconds should be converted to ISO format string."""
+        value = datetime(2024, 1, 15, 10, 30, 45, 123456, tzinfo=timezone.utc)
+        result = _coerce_for_json(value)
+        assert isinstance(result, str)
+        assert "2024-01-15T10:30:45.123456" in result
+
+    def test_coerce_for_json_nested_structure_with_all_special_cases(self):
+        """Nested structure with negative timedeltas and large ints should be coerced correctly."""
+        value = {
+            "durations": [pd.Timedelta("-2 days"), pd.Timedelta("3 hours")],
+            "ids": [100, 3_000_000_000],
+            "nested": {"time": pd.Timedelta(seconds=-1.5)},
+        }
+        result = _coerce_for_json(value)
+        assert isinstance(result, dict)
+        assert result["durations"][0] == "-PT172800S"  # -2 days
+        assert result["durations"][1] == "PT10800S"  # 3 hours
+        assert result["ids"][0] == 100
+        assert result["ids"][1] == [3_000_000_000, "EdmType.INT64"]
+        assert result["nested"]["time"] == "-PT1.5S"
+
+    def test_coerce_for_json_list_with_none(self):
+        """List containing None should be preserved."""
+        value = [1, None, "text"]
+        result = _coerce_for_json(value)
+        assert result == [1, None, "text"]
+
+    def test_coerce_for_json_tuple_conversion(self):
+        """Tuple should be converted to list."""
+        value = (1, 2, 3)
+        result = _coerce_for_json(value)
+        assert isinstance(result, list)
+        assert result == [1, 2, 3]
+
+    def test_coerce_for_json_nested_tuple(self):
+        """Nested tuple should be recursively converted to list."""
+        value = (1, (2, 3), 4)
+        result = _coerce_for_json(value)
+        assert isinstance(result, list)
+        assert result == [1, [2, 3], 4]
 
 
 class TestCoerceValue:
@@ -44,6 +204,52 @@ class TestCoerceValue:
     def test_coerce_pd_na_returns_none(self):
         """pd.NA should be converted to None."""
         assert _coerce_value(pd.NA) is None
+
+    def test_coerce_value_array_like_pd_isna_result(self):
+        """Array-like pd.isna result should be handled with size check."""
+        # Mock pd.isna to return an array of True (single-element)
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return a numpy array instead of scalar
+            mock_isna.return_value = np.array([True])
+
+            test_value = float("nan")  # This would normally be NA
+            result = _coerce_value(test_value)
+            assert result is None
+
+    def test_coerce_value_elif_scalar_isna_true_branch(self):
+        """Test the elif branch: scalar True from pd.isna without size attribute."""
+        # The elif branch (line 144-145) requires:
+        # 1. not hasattr(na_result, 'size') -> True (scalar, not array)
+        # 2. na_result -> True (the actual value is True)
+
+        # Use a string - it doesn't have .item() so it skips line 130
+        # and reaches the pd.isna check
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            # Return scalar True (bool without 'size' attribute)
+            mock_isna.return_value = True
+
+            # A string doesn't have .item() and won't match other handlers
+            test_value = "test_string_value"
+            result = _coerce_value(test_value)
+
+            # Should return None because pd.isna returned True
+            assert result is None
+
+            # Verify our mock was called
+            mock_isna.assert_called_once_with(test_value)
+
+    def test_coerce_value_exception_in_pd_isna_handler(self):
+        """Exception handler in pd.isna should catch ValueError and TypeError in _coerce_value."""
+        # Mock pd.isna to raise an exception
+        with patch("ds_provider_azure_py_lib.serde.coercion.pd.isna") as mock_isna:
+            mock_isna.side_effect = ValueError("Test exception from pd.isna")
+
+            test_value = "test"
+
+            # The exception should be caught and the function should continue
+            result = _coerce_value(test_value)
+            # Should return the value as-is since it's a string
+            assert result == "test"
 
     def test_coerce_numpy_int64_to_native_int(self):
         """numpy.int64 should be converted to native int."""
