@@ -1,5 +1,5 @@
 """
-**File:** coercion.py**
+**File:** ``coercion.py``
 **Region:** ``ds_provider_azure_py_lib/serde/coercion``
 
 Coercion functions to convert between pandas/numpy/pyarrow types and Azure Table Storage-compatible types.
