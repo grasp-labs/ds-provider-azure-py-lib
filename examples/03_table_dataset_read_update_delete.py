@@ -135,7 +135,7 @@ def main():
 
     # Update test: modify and save
     if not dataset.output.empty:
-        print("\n✏Testing update operation...")
+        print("\nTesting update operation...")
         dataset.input = dataset.output.copy()
         dataset.input["Score"] = [99.5, 97.0]  # Modify some data
         dataset.update()
