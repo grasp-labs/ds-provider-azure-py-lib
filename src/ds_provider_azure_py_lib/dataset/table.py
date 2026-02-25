@@ -89,7 +89,7 @@ class ReadSettings:
 
 
 @dataclass(kw_only=True)
-class DeleteSettings:
+class PurgeSettings:
     """
     Settings specific to the delete() operation.
 
@@ -115,11 +115,9 @@ class AzureTableDatasetSettings(DatasetSettings):
 
     table_name: str
 
-    delete: DeleteSettings = field(default_factory=lambda: DeleteSettings())
+    purge: PurgeSettings = field(default_factory=lambda: PurgeSettings())
     """
-    Delete-specific settings. Only applies to the delete() operation.
-
-    By default, delete() will use default behavior (No table removed on delete, just entity).
+    Purge-specific settings. Only applies to the purge() operation.
     """
     read: ReadSettings = field(default_factory=lambda: ReadSettings())
     """
@@ -278,6 +276,24 @@ class AzureTable(
             else:
                 raise error_cls(message=exc.message, details=self.get_details()) from exc
 
+    def _delete_table(self) -> None:
+        """
+        Deletes the table from Azure Table Storage.
+
+        Returns:
+            None
+
+        Raises:
+            DeleteError: If the table could not be deleted.
+        """
+        logger.debug(f"Deleting table: {self.settings.table_name}.")
+        try:
+            self.linked_service.connection.table_service_client.delete_table(table_name=self.settings.table_name)
+            logger.info(f"Successfully deleted table:{self.settings.table_name}.")
+        except HttpResponseError as exc:
+            logger.error(f"Failed to delete Table ({self.settings.table_name})")
+            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
+
     def _create_table(self) -> None:
         """
         Creates a table in Azure Table Storage if it does not exist.
@@ -339,6 +355,11 @@ class AzureTable(
         Raises:
             CreateError: If the entity could not be created.
         """
+        # Empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
+
         self._create_table()
         transaction = self._build_transaction_from_input("create")
         try:
@@ -350,7 +371,7 @@ class AzureTable(
 
         except HttpResponseError as exc:
             raise CreateError("Failed to create entity in Azure Table Storage.", details=self.get_details()) from exc
-        self.output = self.input
+        self.output = self.input.copy()
 
     def update(self, **_kwargs: Any) -> None:
         """
@@ -359,14 +380,16 @@ class AzureTable(
         Returns:
             None
         """
-        if len(self.input) == 0:
+        # Empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
             logger.debug("Input DataFrame is empty. No entities to update in Azure Table Storage.")
-        else:
-            transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
-            self._submit_transaction(transaction, UpdateError)
-            logger.info("Successfully updated entities.")
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
 
-        self.output = self.input
+        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
+        self._submit_transaction(transaction, UpdateError)
+        logger.info("Successfully updated entities.")
+        self.output = self.input.copy()
 
     def delete(self, **_kwargs: Any) -> None:
         """
@@ -381,14 +404,17 @@ class AzureTable(
         Raises:
             DeleteError: If there is an error deleting from Azure Table Storage.
         """
-
-        if len(self.input) == 0:
+        # For entity deletion, empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
             logger.debug("Input DataFrame is empty. No entities to delete in Azure Table.")
-        else:
-            transaction = self._build_transaction_from_input("delete")
-            logger.debug(f"Deleting entities: {len(transaction)} items")
-            self._submit_transaction(transaction, DeleteError)
-            logger.info("Successfully deleted entities.")
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
+
+        transaction = self._build_transaction_from_input("delete")
+        logger.debug(f"Deleting entities: {len(transaction)} items")
+        self._submit_transaction(transaction, DeleteError)
+        logger.info("Successfully deleted entities.")
+        self.output = self.input.copy()
 
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
@@ -410,13 +436,7 @@ class AzureTable(
         Raises:
             DeleteError: If the table could not be deleted.
         """
-        logger.debug(f"Deleting table: {self.settings.table_name}.")
-        try:
-            self.linked_service.connection.table_service_client.delete_table(table_name=self.settings.table_name)
-        except HttpResponseError as exc:
-            logger.error(f"Failed to delete Table ({self.settings.table_name})")
-            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
-        logger.info(f"Successfully deleted table:{self.settings.table_name}.")
+        self._delete_table()
 
     def upsert(self) -> NoReturn:
         raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
@@ -437,8 +457,8 @@ class AzureTable(
         if read_settings is not None and read_settings.query_filter is not None:
             details["query_filter"] = read_settings.query_filter
 
-        delete_settings = getattr(self.settings, "delete", None)
-        if delete_settings is not None:
-            details["delete_table"] = str(delete_settings.delete_table)
+        purge_settings = getattr(self.settings, "purge", None)
+        if purge_settings is not None:
+            details["delete_table"] = str(purge_settings.delete_table)
 
         return details

@@ -26,9 +26,10 @@ from datetime import date, datetime, time, timezone
 
 import numpy as np
 import pandas as pd
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
-from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, DeleteSettings
+from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, PurgeSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -66,9 +67,11 @@ def main():
     )
 
     dataset.linked_service.connect()
-    dataset.create()
-    dataset.read()
-    row = dataset.output
+    try:
+        dataset.read()
+        row = dataset.output
+    except ReadError:
+        row = pd.DataFrame({})
 
     if not row.empty:
         print("Read existing entities from table:")

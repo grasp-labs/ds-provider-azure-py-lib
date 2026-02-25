@@ -31,7 +31,7 @@ from ds_provider_azure_py_lib.dataset.table import (
     AzureTable,
     AzureTableDatasetSettings,
     AzureTableDeserializer,
-    DeleteSettings,
+    PurgeSettings,
     ReadSettings,
 )
 from ds_provider_azure_py_lib.enums import ResourceType
@@ -53,8 +53,9 @@ def make_linked_service_with_table_client(table_client: TableClient | None = Non
     if table_client:
         svc.get_table_client.return_value = table_client
     linked = MagicMock(spec=AzureLinkedService)
-    # AzureTable expects connect() -> (something, TableServiceClient)
-    linked.connect.return_value = (MagicMock(), svc)
+    connection_mock = MagicMock()
+    connection_mock.table_service_client = svc
+    linked.connection = connection_mock
     return linked, svc
 
 
@@ -184,7 +185,9 @@ def _make_linked_service_and_table_client():
     svc = MagicMock(spec=TableServiceClient)
     svc.get_table_client.return_value = table_client
     linked = MagicMock(spec=AzureLinkedService)
-    linked.table_service_client = svc
+    connection_mock = MagicMock()
+    connection_mock.table_service_client = svc
+    linked.connection = connection_mock
     return linked, table_client, svc
 
 
@@ -340,13 +343,13 @@ def test_update_calls_submit_with_replace_mode():
 def test_delete_with_delete_table_flag_and_entity_path():
     linked, table_client, svc = _make_linked_service_and_table_client()
     ds = AzureTable(
-        settings=AzureTableDatasetSettings(table_name="t", delete=DeleteSettings(delete_table=True)),
+        settings=AzureTableDatasetSettings(table_name="t", purge=PurgeSettings(delete_table=True)),
         linked_service=linked,
         id=uuid.uuid4(),
         name="testazurepackage",
         version="0.0.1",
     )
-    ds.delete()
+    ds.purge()
     svc.delete_table.assert_called_once_with(table_name="t")
     ds2 = AzureTable(
         settings=AzureTableDatasetSettings(table_name="t"),
@@ -365,7 +368,7 @@ def test_get_details_includes_read_and_delete_settings():
         settings=AzureTableDatasetSettings(
             table_name="t",
             read=ReadSettings(query_filter="f"),
-            delete=DeleteSettings(delete_table=True),
+            purge=PurgeSettings(delete_table=True),
         ),
         linked_service=MagicMock(spec=AzureLinkedService),
         id=uuid.uuid4(),

@@ -16,7 +16,10 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 from azure.core.credentials import AzureNamedKeyCredential
-from ds_resource_plugin_py_lib.common.resource.linked_service.errors import AuthenticationError
+from ds_resource_plugin_py_lib.common.resource.linked_service.errors import (
+    AuthenticationError,
+    ConnectionError,
+)
 
 from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service.storage_account import AzureLinkedService, AzureLinkedServiceSettings

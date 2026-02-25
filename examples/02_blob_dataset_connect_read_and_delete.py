@@ -18,6 +18,7 @@ Prerequisites:
 import os
 import uuid
 
+import pandas as pd
 from ds_resource_plugin_py_lib.common.resource.dataset import DatasetStorageFormatType
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
@@ -60,6 +61,13 @@ def main():
     dataset.linked_service.connect()
     dataset.linked_service.test_connection()
 
+    dataset.input = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "name": ["Alice", "Bob", "Charlie"],
+            "age": [25, 30, 35],
+        }
+    )
     dataset.create()
     dataset.read()
     print(dataset.output)

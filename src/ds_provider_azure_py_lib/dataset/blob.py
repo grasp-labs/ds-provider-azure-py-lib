@@ -61,7 +61,11 @@ from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
 )
 from ds_resource_plugin_py_lib.common.resource.dataset.base import TabularDataset
-from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
+    CreateError,
+    DeleteError,
+    ReadError,
+)
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -333,6 +337,8 @@ class AzureBlob(
         Raises:
             ReadError: If reading the blob(s) fails.
         """
+        self.output = pd.DataFrame()
+
         if self.settings.blob_name:
             self.output = self._read_blob(self.settings.blob_name)
         elif self.settings.prefix:
@@ -354,12 +360,16 @@ class AzureBlob(
         Raises:
             CreateError: If the blob creation fails.
         """
-
         if not self.settings.blob_name:
             raise CreateError("Blob name must be provided for creation.", details=self.get_details(), status_code=400)
 
         if not self.serializer:
             raise CreateError("Data serializer must be provided for creation.", details=self.get_details(), status_code=400)
+
+        # Empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
 
         if self.settings.create.new_container:
             self._create_container()
@@ -368,6 +378,7 @@ class AzureBlob(
         self._create_blob(stream, blob=self.settings.blob_name)
 
         logger.debug(f"Blob {self.settings.blob_name} created successfully.")
+        self.output = self.input.copy()
 
     def update(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Update operation is not supported for Azure Blob datasets")
@@ -418,6 +429,8 @@ class AzureBlob(
             raise DeleteError(
                 "Either blob name or prefix must be provided for deletion.", details=self.get_details(), status_code=400
             )
+
+        self.output = self.input.copy() if self.input is not None else pd.DataFrame()
 
     def rename(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")

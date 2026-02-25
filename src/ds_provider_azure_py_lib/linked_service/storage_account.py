@@ -217,3 +217,26 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             None
         """
         pass
+
+    def __enter__(self) -> "AzureLinkedService[AzureLinkedServiceSettingsType]":
+        """
+        Enter context manager.
+
+        Returns:
+            AzureLinkedService: Returns self for use in with statement.
+        """
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        """
+        Exit context manager and close the connection.
+
+        Args:
+            exc_type: Exception type if an exception occurred.
+            exc_val: Exception value if an exception occurred.
+            exc_tb: Exception traceback if an exception occurred.
+
+        Returns:
+            None
+        """
+        self.close()
