@@ -682,3 +682,45 @@ class TestAzureBlobDataset2(unittest.TestCase):
 
         with pytest.raises(DeleteError):
             blob.delete()
+
+    def test_update_raises_not_implemented(self) -> None:
+        """Test that update() raises NotImplementedError."""
+        blob = self._make_blob(delete_container=False)
+        with pytest.raises(NotImplementedError, match="Update operation is not supported"):
+            blob.update()
+
+    def test_list_raises_not_implemented(self) -> None:
+        """Test that list() raises NotImplementedError."""
+        blob = self._make_blob(delete_container=False)
+        with pytest.raises(NotImplementedError, match="List operation is not supported"):
+            blob.list()
+
+    def test_purge_raises_not_implemented(self) -> None:
+        """Test that purge() raises NotImplementedError."""
+        blob = self._make_blob(delete_container=False)
+        with pytest.raises(NotImplementedError, match="Purge operation is not supported"):
+            blob.purge()
+
+    def test_upsert_raises_not_implemented(self) -> None:
+        """Test that upsert() raises NotImplementedError."""
+        blob = self._make_blob(delete_container=False)
+        with pytest.raises(NotImplementedError, match="Upsert operation is not supported"):
+            blob.upsert()
+
+    def test_create_with_empty_dataframe(self) -> None:
+        """Test create() with empty DataFrame input is a no-op."""
+        blob = self._make_blob(delete_container=False)
+        blob.settings.blob_name = "test.csv"  # Set blob name for create
+        blob.input = pd.DataFrame()
+        blob.create()
+        assert isinstance(blob.output, pd.DataFrame)
+        assert len(blob.output) == 0
+
+    def test_create_with_none_input(self) -> None:
+        """Test create() with None input is a no-op."""
+        blob = self._make_blob(delete_container=False)
+        blob.settings.blob_name = "test.csv"  # Set blob name for create
+        blob.input = None
+        blob.create()
+        assert isinstance(blob.output, pd.DataFrame)
+        assert len(blob.output) == 0

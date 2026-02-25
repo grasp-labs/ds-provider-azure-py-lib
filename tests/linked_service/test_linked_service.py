@@ -15,6 +15,7 @@ import unittest
 import uuid
 from unittest.mock import MagicMock, patch
 
+import pytest
 from azure.core.credentials import AzureNamedKeyCredential
 from ds_resource_plugin_py_lib.common.resource.linked_service.errors import (
     AuthenticationError,
@@ -177,3 +178,86 @@ class AzureLinkedServiceTests(unittest.TestCase):
             settings=object(), id=uuid.uuid4(), name="testazurepackage", version="0.0.1"
         )  # Invalid settings type
         self.assertRaises(AttributeError, svc.check_settings_is_set)
+
+    def test_context_manager_exit_calls_close(self):
+        """Test that __exit__ calls close()."""
+        with patch("ds_provider_azure_py_lib.linked_service.storage_account.Logger"):
+            ls = AzureLinkedService(
+                settings=AzureLinkedServiceSettings(account_name="test", access_key="test"),
+                id="test-id",
+                name="test",
+                version="1.0.0",
+                description="test",
+            )
+
+        with patch.object(ls, "close") as mock_close:
+            ls.__exit__(None, None, None)
+            mock_close.assert_called_once()
+
+    def test_context_manager_exit_with_exception(self):
+        """Test that __exit__ calls close() even with exception."""
+        with patch("ds_provider_azure_py_lib.linked_service.storage_account.Logger"):
+            ls = AzureLinkedService(
+                settings=AzureLinkedServiceSettings(account_name="test", access_key="test"),
+                id="test-id",
+                name="test",
+                version="1.0.0",
+                description="test",
+            )
+
+        with patch.object(ls, "close") as mock_close:
+            exc = ValueError("test error")
+            ls.__exit__(ValueError, exc, None)
+            mock_close.assert_called_once()
+
+    def test_linked_service_context_manager_integration(self):
+        """Test LinkedService as context manager."""
+        with patch("ds_provider_azure_py_lib.linked_service.storage_account.Logger"):
+            ls = AzureLinkedService(
+                settings=AzureLinkedServiceSettings(account_name="test", access_key="test"),
+                id="test-id",
+                name="test",
+                version="1.0.0",
+                description="test",
+            )
+
+        with patch.object(ls, "close") as mock_close:
+            with ls as context:
+                assert context is ls
+            mock_close.assert_called_once()
+
+    def test_connection_property_raises_when_not_connected(self):
+        """Test that connection property raises when clients are None."""
+        with patch("ds_provider_azure_py_lib.linked_service.storage_account.Logger"):
+            ls = AzureLinkedService(
+                settings=AzureLinkedServiceSettings(account_name="test", access_key="test"),
+                id="test-id",
+                name="test",
+                version="1.0.0",
+                description="test",
+            )
+
+        with pytest.raises(ConnectionError, match="Connection has not been established"):
+            _ = ls.connection
+
+    def test_connection_property_returns_connection_object(self):
+        """Test that connection property returns AzureLinkedServiceConnection when connected."""
+        with patch("ds_provider_azure_py_lib.linked_service.storage_account.Logger"):
+            ls = AzureLinkedService(
+                settings=AzureLinkedServiceSettings(account_name="test", access_key="test"),
+                id="test-id",
+                name="test",
+                version="1.0.0",
+                description="test",
+            )
+
+        mock_blob_client = MagicMock()
+        mock_table_client = MagicMock()
+        ls._blob_service_client = mock_blob_client
+        ls._table_service_client = mock_table_client
+
+        connection = ls.connection
+
+        assert connection is not None
+        assert connection.blob_service_client is mock_blob_client
+        assert connection.table_service_client is mock_table_client
