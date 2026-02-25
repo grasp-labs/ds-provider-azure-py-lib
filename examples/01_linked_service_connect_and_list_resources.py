@@ -34,13 +34,13 @@ def main():
 
     linked_service.connect()
     linked_service.test_connection()
-    tables = linked_service.table_service_client.list_tables()
+    tables = linked_service.connection.table_service_client.list_tables()
 
     print("Tables:")
     for table in tables:
         print(f" -{table.name}")
 
-    containers = linked_service.blob_service_client.list_containers()
+    containers = linked_service.connection.blob_service_client.list_containers()
     print("\nContainers:")
     container_name = None
     for container in containers:
@@ -48,7 +48,7 @@ def main():
         container_name = container.name
 
     if container_name:
-        test_container = linked_service.blob_service_client.get_container_client(container_name)
+        test_container = linked_service.connection.blob_service_client.get_container_client(container_name)
         if test_container.exists():
             blobs = test_container.list_blobs()
             print(f"\nBlobs in {container_name} container:")

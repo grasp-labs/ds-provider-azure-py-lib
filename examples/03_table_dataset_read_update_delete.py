@@ -49,7 +49,6 @@ def main():
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
             read=ReadSettings(query_filter="PartitionKey eq 'colors'"),
-            delete=DeleteSettings(delete_table=True),
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
@@ -131,7 +130,7 @@ def main():
     if not dataset.output.empty:
         print("\nTesting delete operation...")
         dataset.input = dataset.output.copy()
-        dataset.delete()
+        dataset.purge()
         print("Delete completed successfully!")
 
         # Verify deletion

@@ -26,7 +26,10 @@ from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient
 from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.linked_service import LinkedService, LinkedServiceSettings
-from ds_resource_plugin_py_lib.common.resource.linked_service.errors import AuthenticationError
+from ds_resource_plugin_py_lib.common.resource.linked_service.errors import (
+    AuthenticationError,
+    ConnectionError,
+)
 
 from ..enums import ResourceType
 
@@ -47,6 +50,16 @@ AzureLinkedServiceSettingsType = TypeVar(
     "AzureLinkedServiceSettingsType",
     bound=AzureLinkedServiceSettings,
 )
+
+
+@dataclass(kw_only=True)
+class AzureLinkedServiceConnection:
+    """
+    The object containing the Azure linked service connection clients.
+    """
+
+    blob_service_client: BlobServiceClient
+    table_service_client: TableServiceClient
 
 
 @dataclass(kw_only=True)
@@ -86,6 +99,23 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
              ResourceType
         """
         return ResourceType.STORAGE_ACCOUNT
+
+    @property
+    def connection(self) -> AzureLinkedServiceConnection:
+        """
+        Get the connection object for Azure StorageAccount.
+
+        Returns:
+            AzureLinkedServiceConnection
+        """
+        if self._table_service_client is None or self._blob_service_client is None:
+            raise ConnectionError(
+                message="Connection has not been established. Call connect() first.",
+                details={"provider": self.type.value},
+            )
+        return AzureLinkedServiceConnection(
+            blob_service_client=self._blob_service_client, table_service_client=self._table_service_client
+        )
 
     @property
     def blob_service_client(self) -> BlobServiceClient:

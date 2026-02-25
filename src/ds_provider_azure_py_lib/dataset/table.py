@@ -215,7 +215,7 @@ class AzureTable(
         Returns:
             TableClient
         """
-        return self.linked_service.table_service_client.get_table_client(table_name=self.settings.table_name)
+        return self.linked_service.connection.table_service_client.get_table_client(table_name=self.settings.table_name)
 
     def _build_transaction_from_input(self, operation: str, params: Mapping[str, Any] | None = None) -> list[TransactionEntry]:
         """
@@ -289,7 +289,7 @@ class AzureTable(
             CreateError: If the table could not be created due to an error other than it already existing.
         """
         try:
-            self.linked_service.table_service_client.create_table(
+            self.linked_service.connection.table_service_client.create_table(
                 table_name=self.settings.table_name,
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
@@ -297,24 +297,6 @@ class AzureTable(
             logger.debug(f"Table ({self.settings.table_name}) already exists.")
         except HttpResponseError as exc:
             raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
-
-    def _delete_table(self) -> None:
-        """
-        Deletes the table from Azure Table Storage.
-
-        Returns:
-            None
-
-        Raises:
-            DeleteError: If the table could not be deleted.
-        """
-        logger.debug(f"Deleting table: {self.settings.table_name}.")
-        try:
-            self.linked_service.table_service_client.delete_table(table_name=self.settings.table_name)
-        except HttpResponseError as exc:
-            logger.error(f"Failed to delete Table ({self.settings.table_name})")
-            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
-        logger.info(f"Successfully deleted table:{self.settings.table_name}.")
 
     def read(self, **__kwargs: Any) -> None:
         """
@@ -329,7 +311,9 @@ class AzureTable(
         Raises:
             ReadError: If there is an error reading from Azure Table Storage.
         """
-        table_client: TableClient = self.linked_service.table_service_client.get_table_client(table_name=self.settings.table_name)
+        table_client: TableClient = self.linked_service.connection.table_service_client.get_table_client(
+            table_name=self.settings.table_name
+        )
         try:
             if self.settings.read.query_filter:
                 entities = table_client.query_entities(
@@ -397,9 +381,8 @@ class AzureTable(
         Raises:
             DeleteError: If there is an error deleting from Azure Table Storage.
         """
-        if self.settings.delete.delete_table:
-            self._delete_table()
-        elif len(self.input) == 0:
+
+        if len(self.input) == 0:
             logger.debug("Input DataFrame is empty. No entities to delete in Azure Table.")
         else:
             transaction = self._build_transaction_from_input("delete")
@@ -413,6 +396,30 @@ class AzureTable(
     def close(self) -> None:
         """No need to close the linked service. Just to comply with the interface."""
         pass
+
+    def list(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("List operation is not supported for Azure Blob datasets")
+
+    def purge(self, **_kwargs: Any) -> None:
+        """
+        Deletes the table from Azure Table Storage.
+
+        Returns:
+            None
+
+        Raises:
+            DeleteError: If the table could not be deleted.
+        """
+        logger.debug(f"Deleting table: {self.settings.table_name}.")
+        try:
+            self.linked_service.connection.table_service_client.delete_table(table_name=self.settings.table_name)
+        except HttpResponseError as exc:
+            logger.error(f"Failed to delete Table ({self.settings.table_name})")
+            raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
+        logger.info(f"Successfully deleted table:{self.settings.table_name}.")
+
+    def upsert(self) -> NoReturn:
+        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
 
     def get_details(self) -> dict[str, Any]:
         """

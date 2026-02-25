@@ -41,6 +41,7 @@ Example:
     >>> blob_data = azure_blob.output
 """
 
+import builtins
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
 
@@ -165,7 +166,7 @@ class AzureBlob(
         Returns:
             ItemPaged[BlobProperties]: An iterable of BlobProperties matching the prefix.
         """
-        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
             self.settings.container_name
         )
         return container_client.list_blobs(name_starts_with=prefix)
@@ -183,7 +184,7 @@ class AzureBlob(
         logger.debug(f"Reading blob: {blob}")
         content = pd.DataFrame()
 
-        blob_client: BlobClient = self.linked_service.blob_service_client.get_blob_client(
+        blob_client: BlobClient = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -224,7 +225,7 @@ class AzureBlob(
         Returns:
             None
         """
-        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
             self.settings.container_name
         )
         try:
@@ -250,7 +251,7 @@ class AzureBlob(
         Returns:
             None
         """
-        blob_client = self.linked_service.blob_service_client.get_blob_client(
+        blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -277,7 +278,7 @@ class AzureBlob(
             DeleteError: If the blob deletion fails.
         """
         logger.debug(f"Deleting blob: {blob}")
-        blob_client = self.linked_service.blob_service_client.get_blob_client(
+        blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -371,6 +372,15 @@ class AzureBlob(
     def update(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Update operation is not supported for Azure Blob datasets")
 
+    def list(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("List operation is not supported for Azure Blob datasets")
+
+    def purge(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("Purge operation is not supported for Azure Blob datasets")
+
+    def upsert(self) -> NoReturn:
+        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
+
     def delete(self, **_kwargs: Any) -> None:
         """
         Deletes a specific blob in the container.
@@ -385,7 +395,7 @@ class AzureBlob(
             DeleteError: If the blob deletion fails.
         """
         if self.settings.delete.delete_container:
-            container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+            container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
                 self.settings.container_name
             )
             try:
@@ -422,7 +432,7 @@ class AzureBlob(
         pass
 
     @staticmethod
-    def concat(dfs: list[pd.DataFrame]) -> pd.DataFrame:
+    def concat(dfs: builtins.list[pd.DataFrame]) -> pd.DataFrame:
         """
         concatenate a list of dataframes into a single dataframe.
 

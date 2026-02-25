@@ -60,6 +60,7 @@ def main():
     dataset.linked_service.connect()
     dataset.linked_service.test_connection()
 
+    dataset.create()
     dataset.read()
     print(dataset.output)
 
