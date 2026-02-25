@@ -241,13 +241,13 @@ class AzureBlob(
             logger.error(f"Failed to create container: {exc!s}")
             raise CreateError(f"Failed to create container in Azure Blob Storage: {exc!s}", details=self.get_details()) from exc
 
-    def _create_blob(self, stream: str, blob: str) -> None:
+    def _create_blob(self, stream: bytes, blob: str) -> None:
         """
         Create a specific blob in the container.
 
         Args:
-            blob: name of the blob to create.
             stream: data stream to upload to the blob.
+            blob: name of the blob to create.
 
         Raises:
             CreateError: If the blob creation fails.
@@ -389,7 +389,7 @@ class AzureBlob(
     def purge(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Purge operation is not supported for Azure Blob datasets")
 
-    def upsert(self) -> NoReturn:
+    def upsert(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
 
     def delete(self, **_kwargs: Any) -> None:

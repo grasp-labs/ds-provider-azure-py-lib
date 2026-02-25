@@ -314,12 +314,12 @@ class AzureTable(
         except HttpResponseError as exc:
             raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
-    def read(self, **__kwargs: Any) -> None:
+    def read(self, **_kwargs: Any) -> None:
         """
         Read Azure Table Storage dataset.
 
         Args:
-            __kwargs: Additional keyword arguments
+            _kwargs: Additional keyword arguments
 
         Returns:
             None
@@ -424,7 +424,7 @@ class AzureTable(
         pass
 
     def list(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("List operation is not supported for Azure Blob datasets")
+        raise NotImplementedError("List operation is not supported for Azure Table datasets")
 
     def purge(self, **_kwargs: Any) -> None:
         """
