@@ -420,7 +420,12 @@ class AzureTable(
         raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
 
     def close(self) -> None:
-        """No need to close the linked service. Just to comply with the interface."""
+        """
+        No need to close the linked service. Just to comply with the interface.
+
+        Returns:
+            None
+        """
         pass
 
     def list(self, **_kwargs: Any) -> NoReturn:
@@ -438,8 +443,8 @@ class AzureTable(
         """
         self._delete_table()
 
-    def upsert(self) -> NoReturn:
-        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
+    def upsert(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("Upsert operation is not supported for Azure Table datasets")
 
     def get_details(self) -> dict[str, Any]:
         """
