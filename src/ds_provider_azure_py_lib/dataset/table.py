@@ -91,7 +91,7 @@ class ReadSettings:
 @dataclass(kw_only=True)
 class PurgeSettings:
     """
-    Settings specific to the delete() operation.
+    Settings specific to the purge() operation.
 
     These settings only apply when deleting data from the database
     and do not affect other operations like:  create(), read(), update(), or rename().
@@ -278,7 +278,7 @@ class AzureTable(
 
     def _delete_table(self) -> None:
         """
-        Deletes the table from Azure Table Storage.
+        Deletes the entire table from Azure Table Storage.
 
         Returns:
             None
@@ -289,9 +289,9 @@ class AzureTable(
         logger.debug(f"Deleting table: {self.settings.table_name}.")
         try:
             self.linked_service.connection.table_service_client.delete_table(table_name=self.settings.table_name)
-            logger.info(f"Successfully deleted table:{self.settings.table_name}.")
+            logger.info(f"Successfully deleted table: {self.settings.table_name}.")
         except HttpResponseError as exc:
-            logger.error(f"Failed to delete Table ({self.settings.table_name})")
+            logger.error(f"Failed to delete table ({self.settings.table_name})")
             raise DeleteError(f"Failed to delete table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
     def _create_table(self) -> None:
@@ -393,7 +393,9 @@ class AzureTable(
 
     def delete(self, **_kwargs: Any) -> None:
         """
-        Delete an entity or table in Azure Table Storage.
+        Delete specific entities from Azure Table Storage.
+
+        Only entities specified in `self.input` are deleted, matched by PartitionKey and RowKey.
 
         Args:
             _kwargs: Additional keyword arguments
@@ -433,15 +435,41 @@ class AzureTable(
 
     def purge(self, **_kwargs: Any) -> None:
         """
-        Deletes the table from Azure Table Storage.
+        Purge all entities from the table or drop the entire table.
+
+        If `delete_table=True` in settings, deletes the entire table.
+        Otherwise, deletes all entities from the table, leaving it empty.
 
         Returns:
             None
 
         Raises:
-            DeleteError: If the table could not be deleted.
+            DeleteError: If there is an error purging from Azure Table Storage.
         """
-        self._delete_table()
+        if self.settings.purge.delete_table:
+            # Delete the entire table
+            self._delete_table()
+        else:
+            # Delete all entities from the table
+            try:
+                table_client = self._get_table_client()
+                # Fetch all entities and delete them
+                entities_to_delete = list(table_client.list_entities())
+                if entities_to_delete:
+                    # Build and submit delete transaction for all entities
+                    transaction: list[TransactionEntry] = []
+                    for entity in entities_to_delete:
+                        # Entity must have PartitionKey and RowKey
+                        entity_dict = dict(entity)
+                        transaction.append(("delete", entity_dict))
+
+                    self._submit_transaction(transaction, DeleteError)
+                logger.info(f"Successfully purged all entities from table {self.settings.table_name}.")
+            except HttpResponseError as exc:
+                raise DeleteError(
+                    f"Failed to purge entities from table {self.settings.table_name}: {exc!s}",
+                    details=self.get_details(),
+                ) from exc
 
     def upsert(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Upsert operation is not supported for Azure Table datasets")

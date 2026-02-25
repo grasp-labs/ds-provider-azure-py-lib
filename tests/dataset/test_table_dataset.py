@@ -612,3 +612,119 @@ def test_table_read_without_deserializer_raises_error() -> None:
 
     with pytest.raises(ReadError, match="Deserializer is not initialized"):
         table.read()
+
+
+def test_table_purge_deletes_all_entities() -> None:
+    """Test that purge() deletes all entities from the table."""
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test", purge=PurgeSettings(delete_table=False)),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.0",
+        description="test",
+    )
+
+    # Mock the table client with entities
+    mock_table_client = MagicMock()
+    mock_entities = [
+        MagicMock(
+            spec=dict,
+            **{
+                "__getitem__": MagicMock(side_effect=lambda k: "pk1" if k == "PartitionKey" else "rk1"),
+                "__iter__": lambda: iter(["PartitionKey", "RowKey"]),
+            },
+        ),
+        MagicMock(
+            spec=dict,
+            **{
+                "__getitem__": MagicMock(side_effect=lambda k: "pk2" if k == "PartitionKey" else "rk2"),
+                "__iter__": lambda: iter(["PartitionKey", "RowKey"]),
+            },
+        ),
+    ]
+    mock_table_client.list_entities.return_value = mock_entities
+
+    table.linked_service.connection.table_service_client.get_table_client.return_value = mock_table_client
+
+    table.purge()
+
+    # Verify list_entities was called
+    mock_table_client.list_entities.assert_called_once()
+    # Verify submit_transaction was called
+    mock_table_client.submit_transaction.assert_called_once()
+
+
+def test_table_purge_with_empty_table() -> None:
+    """Test that purge() handles empty table gracefully."""
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test", purge=PurgeSettings(delete_table=False)),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.1",
+        description="test",
+    )
+
+    # Mock the table client with no entities
+    mock_table_client = MagicMock()
+    mock_table_client.list_entities.return_value = []
+
+    table.linked_service.connection.table_service_client.get_table_client.return_value = mock_table_client
+
+    table.purge()
+
+    # Verify list_entities was called
+    mock_table_client.list_entities.assert_called_once()
+    # Verify submit_transaction was NOT called (no entities to delete)
+    mock_table_client.submit_transaction.assert_not_called()
+
+
+def test_table_purge_delete_table() -> None:
+    """Test that purge() deletes the entire table when delete_table=True."""
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test", purge=PurgeSettings(delete_table=True)),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.0",
+        description="test",
+    )
+
+    table.purge()
+
+    # Verify delete_table was called
+    table.linked_service.connection.table_service_client.delete_table.assert_called_once_with(table_name="test")
+
+
+def test_table_purge_http_error() -> None:
+    """Test that purge() raises DeleteError on HTTP error."""
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test", purge=PurgeSettings(delete_table=False)),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.0",
+        description="test",
+    )
+
+    # Mock the table client to raise an error
+    mock_table_client = MagicMock()
+    mock_table_client.list_entities.side_effect = HttpResponseError(message="list failed")
+
+    table.linked_service.connection.table_service_client.get_table_client.return_value = mock_table_client
+
+    with pytest.raises(DeleteError, match="Failed to purge entities"):
+        table.purge()
