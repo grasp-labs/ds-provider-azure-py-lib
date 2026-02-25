@@ -19,7 +19,7 @@ Example:
     ...            new_container=True # create a new container or raise an error
     ...         ),
     ...         delete=DeleteSettings(
-    ...            delete_container=True # delete the container or only delete the blob.
+    ...            delete_container=True # confirm deletion of the container via delete() method
     ...         ),
     ...     ),
     ...     linked_service=AzureLinkedService(
@@ -98,10 +98,15 @@ class CreateSettings:
 @dataclass(kw_only=True)
 class DeleteSettings:
     """
-    Settings for delete operations.
+    Settings for delete operations (deleting specific blobs or container).
     """
 
-    delete_container: bool = False  # confirm deletion of the entire container
+    delete_container: bool = False
+    """
+    Confirm deletion of the entire container when delete() is called with no blob_name or prefix.
+    If True, delete() will delete the container.
+    If False, delete() will raise an error if neither blob_name nor prefix is provided.
+    """
 
 
 @dataclass(kw_only=True)
@@ -113,7 +118,8 @@ class AzureBlobDatasetSettings(DatasetSettings):
     if specifying both, only `blob_name` will be considered.
     `prefix` is not used for create(); it can be called only with `blob_name`.
     `create` by default (if not passed) will attempt to create the container if it does not exist.
-    `delete` by default (if not passed) will delete only the specified blob(s), not the entire container.
+    `delete()` removes specific blob(s) by name or prefix.
+    `purge()` removes all blobs from the container, making it empty.
     """
 
     container_name: str
@@ -386,15 +392,12 @@ class AzureBlob(
     def list(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("List operation is not supported for Azure Blob datasets")
 
-    def purge(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Purge operation is not supported for Azure Blob datasets")
-
-    def upsert(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
-
-    def delete(self, **_kwargs: Any) -> None:
+    def purge(self, **_kwargs: Any) -> None:
         """
-        Deletes a specific blob in the container.
+        Purge (remove all content from) the container.
+
+        For Azure Blob Storage, this deletes all blobs from the container,
+        leaving the container empty. The container itself is not deleted.
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
@@ -403,9 +406,56 @@ class AzureBlob(
             None
 
         Raises:
-            DeleteError: If the blob deletion fails.
+            DeleteError: If the purge operation fails.
         """
-        if self.settings.delete.delete_container:
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
+            self.settings.container_name
+        )
+        try:
+            # Delete all blobs in the container
+            for blob in container_client.list_blobs():
+                blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
+                    container=self.settings.container_name,
+                    blob=blob.name,
+                )
+                blob_client.delete_blob()
+            logger.info(f"Container {self.settings.container_name} purged successfully (all blobs deleted).")
+        except HttpResponseError as exc:
+            logger.error(f"Failed to purge container {self.settings.container_name}: {exc!s}")
+            raise DeleteError(
+                f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
+            ) from exc
+
+    def upsert(self, **_kwargs: Any) -> NoReturn:
+        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
+
+    def delete(self, **_kwargs: Any) -> None:
+        """
+        Delete specific blob(s) or the entire container from Azure Blob Storage.
+
+        For Azure Blob Storage, a "row" is a blob. This method deletes:
+        - Specific blob by blob_name
+        - Multiple blobs by prefix
+        - Entire container if delete_container=True and no blob_name/prefix provided
+
+        Args:
+            _kwargs: Additional keyword arguments to pass to the request. (not used)
+
+        Returns:
+            None
+
+        Raises:
+            DeleteError: If the deletion fails or requirements not met.
+        """
+        if self.settings.blob_name:
+            blob_name = self.settings.blob_name
+            self._delete_blob(blob_name)
+            logger.info(f"Blob {blob_name} deleted successfully.")
+        elif self.settings.prefix:
+            prefix = self.settings.prefix
+            self._delete_blobs(prefix)
+            logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
+        elif self.settings.delete.delete_container:
             container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
                 self.settings.container_name
             )
@@ -417,17 +467,11 @@ class AzureBlob(
                 raise DeleteError(
                     f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
                 ) from exc
-        elif self.settings.blob_name:
-            blob_name = self.settings.blob_name
-            self._delete_blob(blob_name)
-            logger.info(f"Blob {blob_name} deleted successfully.")
-        elif self.settings.prefix:
-            prefix = self.settings.prefix
-            self._delete_blobs(prefix)
-            logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
         else:
             raise DeleteError(
-                "Either blob name or prefix must be provided for deletion.", details=self.get_details(), status_code=400
+                "Either blob name, prefix must be provided, or delete_container=True must be set for deletion.",
+                details=self.get_details(),
+                status_code=400,
             )
 
         self.output = self.input.copy() if self.input is not None else pd.DataFrame()

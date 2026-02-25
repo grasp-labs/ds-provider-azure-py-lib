@@ -39,7 +39,7 @@ Example (AzureBlob):
     ...            overwrite_blob_if_exists=True,  # overwrite existing blob or raise an error.
     ...            new_container=True # create container if missing or raise an error.
     ...         ),
-    ...         purge=PurgeSettings(
+    ...         purge=DeleteSettings(
     ...            delete_container=True # delete the container or only delete the blob
     ...         ),
     ...     ),

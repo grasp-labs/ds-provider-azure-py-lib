@@ -695,12 +695,6 @@ class TestAzureBlobDataset2(unittest.TestCase):
         with pytest.raises(NotImplementedError, match="List operation is not supported"):
             blob.list()
 
-    def test_purge_raises_not_implemented(self) -> None:
-        """Test that purge() raises NotImplementedError."""
-        blob = self._make_blob(delete_container=False)
-        with pytest.raises(NotImplementedError, match="Purge operation is not supported"):
-            blob.purge()
-
     def test_upsert_raises_not_implemented(self) -> None:
         """Test that upsert() raises NotImplementedError."""
         blob = self._make_blob(delete_container=False)
@@ -724,3 +718,68 @@ class TestAzureBlobDataset2(unittest.TestCase):
         blob.create()
         assert isinstance(blob.output, pd.DataFrame)
         assert len(blob.output) == 0
+
+    def test_purge_deletes_all_blobs(self) -> None:
+        """Test that purge() deletes all blobs from the container."""
+
+        blob = self._make_blob(delete_container=False)
+
+        # Mock list_blobs to return multiple blobs
+        mock_blob1 = SimpleNamespace(name="blob1.csv")
+        mock_blob2 = SimpleNamespace(name="blob2.csv")
+        mock_blob3 = SimpleNamespace(name="blob3.csv")
+
+        container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
+        container_client.list_blobs.return_value = [mock_blob1, mock_blob2, mock_blob3]
+
+        # Track delete_blob calls
+        deleted_blobs = []
+
+        def mock_delete_blob():
+            deleted_blobs.append(True)
+
+        blob_service_client = blob.linked_service.connection.blob_service_client
+        mock_blob_client = MagicMock()
+        mock_blob_client.delete_blob = mock_delete_blob
+        blob_service_client.get_blob_client.return_value = mock_blob_client
+
+        blob.purge()
+
+        # Verify all blobs were deleted
+        assert len(deleted_blobs) == 3
+        assert blob_service_client.get_blob_client.call_count == 3
+
+    def test_purge_with_empty_container(self) -> None:
+        """Test that purge() succeeds with an empty container."""
+        blob = self._make_blob(delete_container=False)
+
+        # Mock list_blobs to return no blobs
+        container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
+        container_client.list_blobs.return_value = []
+
+        blob_service_client = blob.linked_service.connection.blob_service_client
+
+        blob.purge()
+
+        # Verify no blobs were deleted
+        blob_service_client.get_blob_client.assert_not_called()
+
+    def test_purge_http_error_raises_delete_error(self) -> None:
+        """Test that purge() raises DeleteError on HTTP error."""
+
+        blob = self._make_blob(delete_container=False)
+
+        # Mock list_blobs to return a blob
+        mock_blob = SimpleNamespace(name="blob1.csv")
+        container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
+        container_client.list_blobs.return_value = [mock_blob]
+
+        # Mock delete_blob to raise an error
+        mock_blob_client = MagicMock()
+        mock_blob_client.delete_blob.side_effect = HttpResponseError(message="delete failed")
+
+        blob_service_client = blob.linked_service.connection.blob_service_client
+        blob_service_client.get_blob_client.return_value = mock_blob_client
+
+        with pytest.raises(DeleteError, match="Failed to purge container"):
+            blob.purge()
