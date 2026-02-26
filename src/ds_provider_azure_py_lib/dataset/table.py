@@ -59,6 +59,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     DeleteError,
     ReadError,
     UpdateError,
+    UpsertError,
 )
 
 from ..enums import ResourceType
@@ -241,8 +242,10 @@ class AzureTable(
             except DatasetException as exc:
                 if operation == "create":
                     raise CreateError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
-                elif operation == "upsert":
+                elif operation == "update":
                     raise UpdateError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
+                elif operation == "upsert":
+                    raise UpsertError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
                 elif operation == "delete":
                     raise DeleteError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
                 else:
@@ -386,7 +389,7 @@ class AzureTable(
             self.output = self.input.copy() if self.input is not None else pd.DataFrame()
             return
 
-        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
+        transaction = self._build_transaction_from_input("update", {"mode": UpdateMode.MERGE})
         self._submit_transaction(transaction, UpdateError)
         logger.info("Successfully updated entities.")
         self.output = self.input.copy()
@@ -471,8 +474,17 @@ class AzureTable(
                     details=self.get_details(),
                 ) from exc
 
-    def upsert(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Upsert operation is not supported for Azure Table datasets")
+    def upsert(self, **_kwargs: Any) -> None:
+        # Empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
+            logger.debug("Input DataFrame is empty. No entities to update in Azure Table Storage.")
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
+
+        transaction = self._build_transaction_from_input("upsert", {"mode": UpdateMode.REPLACE})
+        self._submit_transaction(transaction, UpsertError)
+        logger.info("Successfully updated entities.")
+        self.output = self.input.copy()
 
     def get_details(self) -> dict[str, Any]:
         """

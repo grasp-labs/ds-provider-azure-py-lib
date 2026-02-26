@@ -96,16 +96,16 @@ class CreateSettings:
 
 
 @dataclass(kw_only=True)
-class DeleteSettings:
+class PurgeSettings:
     """
-    Settings for delete operations (deleting specific blobs or container).
+    Settings for purge operations
     """
 
     delete_container: bool = False
     """
-    Confirm deletion of the entire container when delete() is called with no blob_name or prefix.
+    Confirm deletion of the entire container when purge() is called.
     If True, delete() will delete the container.
-    If False, delete() will raise an error if neither blob_name nor prefix is provided.
+    If False, delete() will remove all blobs from the container but keep the container itself.
     """
 
 
@@ -119,7 +119,6 @@ class AzureBlobDatasetSettings(DatasetSettings):
     `prefix` is not used for create(); it can be called only with `blob_name`.
     `create` by default (if not passed) will attempt to create the container if it does not exist.
     `delete()` removes specific blob(s) by name or prefix.
-    `purge()` removes all blobs from the container, making it empty.
     """
 
     container_name: str
@@ -127,7 +126,7 @@ class AzureBlobDatasetSettings(DatasetSettings):
     prefix: str | None = None
 
     create: CreateSettings = field(default_factory=CreateSettings)
-    delete: DeleteSettings = field(default_factory=DeleteSettings)
+    purge: PurgeSettings = field(default_factory=PurgeSettings)
 
 
 AzureBlobDatasetSettingsType = TypeVar(
@@ -411,20 +410,30 @@ class AzureBlob(
         container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
             self.settings.container_name
         )
-        try:
-            # Delete all blobs in the container
-            for blob in container_client.list_blobs():
-                blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
-                    container=self.settings.container_name,
-                    blob=blob.name,
-                )
-                blob_client.delete_blob()
-            logger.info(f"Container {self.settings.container_name} purged successfully (all blobs deleted).")
-        except HttpResponseError as exc:
-            logger.error(f"Failed to purge container {self.settings.container_name}: {exc!s}")
-            raise DeleteError(
-                f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
-            ) from exc
+        if self.settings.purge.delete_container:
+            try:
+                container_client.delete_container()
+                logger.info(f"Container {self.settings.container_name} deleted successfully.")
+            except HttpResponseError as exc:
+                logger.error(f"Failed to delete container {self.settings.container_name}: {exc!s}")
+                raise DeleteError(
+                    f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
+                ) from exc
+        else:
+            try:
+                # Delete all blobs in the container
+                for blob in container_client.list_blobs():
+                    blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
+                        container=self.settings.container_name,
+                        blob=blob.name,
+                    )
+                    blob_client.delete_blob()
+                logger.info(f"Container {self.settings.container_name} purged successfully (all blobs deleted).")
+            except HttpResponseError as exc:
+                logger.error(f"Failed to purge container {self.settings.container_name}: {exc!s}")
+                raise DeleteError(
+                    f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
+                ) from exc
 
     def upsert(self, **_kwargs: Any) -> NoReturn:
         raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
@@ -455,21 +464,9 @@ class AzureBlob(
             prefix = self.settings.prefix
             self._delete_blobs(prefix)
             logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
-        elif self.settings.delete.delete_container:
-            container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
-                self.settings.container_name
-            )
-            try:
-                container_client.delete_container()
-                logger.info(f"Container {self.settings.container_name} deleted successfully.")
-            except HttpResponseError as exc:
-                logger.error(f"Failed to delete container {self.settings.container_name}: {exc!s}")
-                raise DeleteError(
-                    f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
-                ) from exc
         else:
             raise DeleteError(
-                "Either blob name, prefix must be provided, or delete_container=True must be set for deletion.",
+                "Either blob name or prefix must be provided, or delete_container=True must be set for deletion.",
                 details=self.get_details(),
                 status_code=400,
             )

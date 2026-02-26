@@ -25,6 +25,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     DeleteError,
     ReadError,
     UpdateError,
+    UpsertError,
 )
 
 from ds_provider_azure_py_lib.dataset.table import (
@@ -217,6 +218,8 @@ def test_build_transaction_from_input_maps_errors():
     with pytest.raises(CreateError):
         ds._build_transaction_from_input("create")
     with pytest.raises(UpdateError):
+        ds._build_transaction_from_input("update")
+    with pytest.raises(UpsertError):
         ds._build_transaction_from_input("upsert")
     with pytest.raises(DeleteError):
         ds._build_transaction_from_input("delete")
@@ -324,7 +327,7 @@ def test_create_success_table_transaction_and_http_error():
         ds.create()
 
 
-def test_update_calls_submit_with_replace_mode():
+def test_update_calls_submit_with_merge_mode():
     linked, table_client, _ = _make_linked_service_and_table_client()
     ds = AzureTable(
         settings=AzureTableDatasetSettings(table_name="t"),
@@ -335,6 +338,22 @@ def test_update_calls_submit_with_replace_mode():
     )
     ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     ds.update()
+    table_client.submit_transaction.assert_called_once()
+    op, _, params = table_client.submit_transaction.call_args[0][0][0]
+    assert op == "update" and params == {"mode": UpdateMode.MERGE}
+
+
+def test_upsert_calls_submit_with_replace_mode():
+    linked, table_client, _ = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+    ds.upsert()
     table_client.submit_transaction.assert_called_once()
     op, _, params = table_client.submit_transaction.call_args[0][0][0]
     assert op == "upsert" and params == {"mode": UpdateMode.REPLACE}
@@ -407,9 +426,6 @@ def test_table_not_implemented_methods() -> None:
 
     with pytest.raises(NotImplementedError, match=r"List operation is not supported.*Azure Table"):
         table.list()
-
-    with pytest.raises(NotImplementedError, match=r"Upsert operation is not supported.*Azure Table"):
-        table.upsert()
 
 
 def test_table_create_with_empty_input() -> None:

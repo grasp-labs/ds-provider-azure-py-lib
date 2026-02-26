@@ -25,7 +25,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
-from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, DeleteSettings
+from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, PurgeSettings
 from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService
 
@@ -654,7 +654,7 @@ class TestAzureBlobDataset2(unittest.TestCase):
 
         settings = AzureBlobDatasetSettings(
             container_name="container",
-            delete=DeleteSettings(delete_container=delete_container),
+            purge=PurgeSettings(delete_container=delete_container),
         )
 
         return AzureBlob(
@@ -667,11 +667,11 @@ class TestAzureBlobDataset2(unittest.TestCase):
             deserializer=MagicMock(),
         )
 
-    def test_delete_deletes_container(self) -> None:
+    def test_purge_deletes_container(self) -> None:
         blob = self._make_blob(delete_container=True)
         container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
 
-        blob.delete()
+        blob.purge()
 
         container_client.delete_container.assert_called_once()
 
