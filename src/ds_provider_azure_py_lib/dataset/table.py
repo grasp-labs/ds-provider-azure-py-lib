@@ -100,8 +100,8 @@ class PurgeSettings:
 
     delete_table: bool = False
     """
-    If True, the entire table will be deleted when delete() is called.
-    If False, only the entities specified in the input will be deleted.
+    If True, the entire table will be deleted when purge() is called.
+    If False, only the table content will be deleted.
     """
 
 
