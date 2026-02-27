@@ -24,6 +24,7 @@ import os
 import uuid
 
 import pandas as pd
+from ds_resource_plugin_py_lib.common.resource.errors import ValidationError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
 from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings
@@ -98,10 +99,19 @@ def main():
     dataset.delete()
     print("This should raise warning")
 
+    try:
+        dataset.input = pd.DataFrame({
+            "PartitionKey": ["colors"],
+        })
+        dataset.delete()
+    except ValidationError:
+        print("Validation error raised as expected for missing RowKey in delete operation")
     dataset.input = pd.DataFrame({
         "PartitionKey": ["colors"],
+        "RowKey": ["2"],
     })
     dataset.delete()
+
     print("\nEntity  deleted successfully!")
     print("\nReading remaining entities from table...")
     dataset.read()
