@@ -152,7 +152,6 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Returns:
             BlobServiceClient
         """
-        logger.debug("Connecting to Azure Blob StorageAccount...")
         account_url = f"https://{self.settings.account_name}.blob.core.windows.net/"
 
         return BlobServiceClient(
@@ -167,7 +166,6 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         Returns:
              TableServiceClient
         """
-        logger.debug("Connecting to Azure Table StorageAccount...")
         account_url = f"https://{self.settings.account_name}.table.core.windows.net/"
 
         return TableServiceClient(
