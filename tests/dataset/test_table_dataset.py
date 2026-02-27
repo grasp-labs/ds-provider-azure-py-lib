@@ -25,7 +25,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     DeleteError,
     ReadError,
 )
-from ds_resource_plugin_py_lib.common.resource.errors import ValidationError
+from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError, ValidationError
 
 from ds_provider_azure_py_lib.dataset.table import (
     AzureTable,
@@ -72,7 +72,7 @@ def test_prepare_content_validations_and_serializer_json_conversion():
         version="0.0.1",
     )
 
-    # missing required columns -> NotImplementedError
+    # missing required columns -> NotSupportedError
     content_2 = pd.DataFrame([{"PartitionKey": "p"}])
     with pytest.raises(ValidationError):
         ds._prepare_content(content_2)
@@ -160,7 +160,7 @@ def test_prepare_content_raises_typeerror_for_non_dataframe_input():
 
 def test_rename_and_close_and_type():
     """
-    Test rename raises NotImplementedError, close is no-op, and type property.
+    Test rename raises NotSupportedError, close is no-op, and type property.
     """
     linked, _ = make_linked_service_with_table_client(MagicMock(spec=TableClient))
     ds = AzureTable(
@@ -170,7 +170,7 @@ def test_rename_and_close_and_type():
         name="testazurepackage",
         version="0.0.1",
     )
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotSupportedError):
         ds.rename()
     ds.close()  # no-op
     assert ds.type == ResourceType.TABLE
@@ -407,7 +407,7 @@ def test_table_deserializer_no_data_returns_empty_dataframe() -> None:
 
 
 def test_table_not_implemented_methods() -> None:
-    """Test NotImplementedError methods for AzureTable."""
+    """Test NotSupportedError methods for AzureTable."""
     linked_service, _ = make_linked_service_with_table_client()
     table = AzureTable(
         deserializer=MagicMock(),
@@ -420,10 +420,10 @@ def test_table_not_implemented_methods() -> None:
         description="test",
     )
 
-    with pytest.raises(NotImplementedError, match="Rename operation is not supported"):
+    with pytest.raises(NotSupportedError, match="Rename operation is not supported"):
         table.rename()
 
-    with pytest.raises(NotImplementedError, match=r"List operation is not supported.*Azure Table"):
+    with pytest.raises(NotSupportedError, match=r"List operation is not supported.*Azure Table"):
         table.list()
 
 

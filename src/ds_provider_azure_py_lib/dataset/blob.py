@@ -66,6 +66,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     DeleteError,
     ReadError,
 )
+from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -388,11 +389,11 @@ class AzureBlob(
         logger.debug(f"Blob {self.settings.blob_name} created successfully.")
         self.output = self.input.copy()
 
-    def update(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Update operation is not supported for Azure Blob datasets")
+    def update(self) -> NoReturn:
+        raise NotSupportedError("Update operation is not supported for Azure Blob datasets")
 
-    def list(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("List operation is not supported for Azure Blob datasets")
+    def list(self) -> NoReturn:
+        raise NotSupportedError("List operation is not supported for Azure Blob datasets")
 
     def purge(self, **_kwargs: Any) -> None:
         """
@@ -438,8 +439,8 @@ class AzureBlob(
                     f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
                 ) from exc
 
-    def upsert(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Upsert operation is not supported for Azure Blob datasets")
+    def upsert(self) -> NoReturn:
+        raise NotSupportedError("Upsert operation is not supported for Azure Blob datasets")
 
     def delete(self, **_kwargs: Any) -> None:
         """
@@ -476,8 +477,8 @@ class AzureBlob(
 
         self.output = self.input.copy() if self.input is not None else pd.DataFrame()
 
-    def rename(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
+    def rename(self) -> NoReturn:
+        raise NotSupportedError("Rename operation is not supported for Azure Blob datasets")
 
     def close(self) -> None:
         """

@@ -22,6 +22,7 @@ from azure.core.exceptions import HttpResponseError, ResourceExistsError
 from azure.storage.blob import BlobServiceClient
 from ds_resource_plugin_py_lib.common.resource.dataset import DatasetStorageFormatType
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
+from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -519,7 +520,7 @@ class TestAzureBlobDataset2(unittest.TestCase):
 
     def test_update_rename_close_behavior(self):
         """
-        Test rename raises NotImplementedError, close is no-op.
+        Test rename raises NotSupportedError, close is no-op.
         """
         linked = self._make_base_linked_service()
         ds = AzureBlob(
@@ -532,10 +533,10 @@ class TestAzureBlobDataset2(unittest.TestCase):
             version="0.0.1",
         )
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotSupportedError):
             ds.update()
 
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotSupportedError):
             ds.rename()
 
         ds.close()  # no-op
@@ -684,21 +685,21 @@ class TestAzureBlobDataset2(unittest.TestCase):
             blob.delete()
 
     def test_update_raises_not_implemented(self) -> None:
-        """Test that update() raises NotImplementedError."""
+        """Test that update() raises NotSupportedError."""
         blob = self._make_blob(delete_container=False)
-        with pytest.raises(NotImplementedError, match="Update operation is not supported"):
+        with pytest.raises(NotSupportedError, match="Update operation is not supported"):
             blob.update()
 
     def test_list_raises_not_implemented(self) -> None:
-        """Test that list() raises NotImplementedError."""
+        """Test that list() raises NotSupportedError."""
         blob = self._make_blob(delete_container=False)
-        with pytest.raises(NotImplementedError, match="List operation is not supported"):
+        with pytest.raises(NotSupportedError, match="List operation is not supported"):
             blob.list()
 
     def test_upsert_raises_not_implemented(self) -> None:
-        """Test that upsert() raises NotImplementedError."""
+        """Test that upsert() raises NotSupportedError."""
         blob = self._make_blob(delete_container=False)
-        with pytest.raises(NotImplementedError, match="Upsert operation is not supported"):
+        with pytest.raises(NotSupportedError, match="Upsert operation is not supported"):
             blob.upsert()
 
     def test_create_with_empty_dataframe(self) -> None:

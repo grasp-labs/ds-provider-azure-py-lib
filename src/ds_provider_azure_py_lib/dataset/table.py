@@ -61,7 +61,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     UpdateError,
     UpsertError,
 )
-from ds_resource_plugin_py_lib.common.resource.errors import ValidationError
+from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError, ValidationError
 
 from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
@@ -432,8 +432,8 @@ class AzureTable(
         logger.info("Successfully deleted entities.")
         self.output = self.input.copy()
 
-    def rename(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Rename operation is not supported for Azure Table datasets")
+    def rename(self) -> NoReturn:
+        raise NotSupportedError("Rename operation is not supported for Azure Table datasets")
 
     def close(self) -> None:
         """
@@ -444,8 +444,8 @@ class AzureTable(
         """
         pass
 
-    def list(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("List operation is not supported for Azure Table datasets")
+    def list(self) -> NoReturn:
+        raise NotSupportedError("List operation is not supported for Azure Table datasets")
 
     def purge(self, **_kwargs: Any) -> None:
         """
