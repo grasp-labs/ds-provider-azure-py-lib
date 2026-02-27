@@ -22,13 +22,15 @@ Prerequisites:
 
 import os
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, time
 
 import numpy as np
 import pandas as pd
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
-from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, DeleteSettings
+from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, \
+    PurgeSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -49,11 +51,12 @@ def main():
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
             read=ReadSettings(query_filter="PartitionKey eq 'colors'"),
-            delete=DeleteSettings(delete_table=True),
+            purge=PurgeSettings(delete_table=True)
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
-                account_name=os.environ.get("ACCOUNT_NAME"), access_key=os.environ.get("ACCOUNT_KEY")
+                account_name=os.environ.get("ACCOUNT_NAME"),
+                access_key=os.environ.get("ACCOUNT_KEY")
             ),
             id=uuid.uuid4(),
             name="testazurepackage",
@@ -67,9 +70,11 @@ def main():
     )
 
     dataset.linked_service.connect()
-    dataset.create()
-    dataset.read()
-    row = dataset.output
+    try:
+        dataset.read()
+        row = dataset.output
+    except ReadError:
+        row = pd.DataFrame({})
 
     if not row.empty:
         print("Read existing entities from table:")
@@ -129,18 +134,24 @@ def main():
 
     # Delete test
     if not dataset.output.empty:
-        print("\nTesting delete operation...")
+        print("\nTesting purge operation...")
         dataset.input = dataset.output.copy()
-        dataset.delete()
+        dataset.purge()
         print("Delete completed successfully!")
 
-        # Verify deletion
-        dataset.read()
-        remaining_count = len(dataset.output)
-        print(f"Remaining entities after delete: {remaining_count}")
-        if remaining_count == 0:
-            print("All entities deleted successfully!")
-        print(dataset.output)
+        print("Waiting 30 seconds for deletion to propagate...")
+        import time as t
+        t.sleep(30)  # Wait for deletion to propagate
+
+        try:
+            dataset.read()
+            remaining_count = len(dataset.output)
+            print(f"Remaining entities after delete: {remaining_count}")
+            if remaining_count == 0:
+                print("All entities deleted successfully!")
+            print(dataset.output)
+        except ReadError:
+            print("Table deleted successfully")
 
 
 if __name__ == "__main__":

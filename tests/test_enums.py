@@ -16,7 +16,7 @@ def test_resource_type_storage_account_value() -> None:
     """
     It exposes the correct linked service type value.
     """
-    assert ResourceType.STORAGE_ACCOUNT == "DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT"
+    assert ResourceType.STORAGE_ACCOUNT == "ds.resource.linked_service.azure_storage_account"
     assert isinstance(ResourceType.STORAGE_ACCOUNT, str)
 
 
@@ -24,7 +24,7 @@ def test_resource_type_blob_value() -> None:
     """
     It exposes the correct blob dataset type value.
     """
-    assert ResourceType.BLOB == "DS.RESOURCE.DATASET.AZURE_BLOB"
+    assert ResourceType.BLOB == "ds.resource.dataset.azure_blob"
     assert isinstance(ResourceType.BLOB, str)
 
 
@@ -32,7 +32,7 @@ def test_resource_type_table_value() -> None:
     """
     It exposes the correct table dataset type value.
     """
-    assert ResourceType.TABLE == "DS.RESOURCE.DATASET.AZURE_TABLE"
+    assert ResourceType.TABLE == "ds.resource.dataset.azure_table"
     assert isinstance(ResourceType.TABLE, str)
 
 
@@ -49,8 +49,8 @@ def test_resource_type_enum_comparison() -> None:
     """
     It supports equality comparison with strings.
     """
-    assert ResourceType.STORAGE_ACCOUNT == "DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT"
-    assert ResourceType.BLOB == "DS.RESOURCE.DATASET.AZURE_BLOB"
-    assert ResourceType.TABLE == "DS.RESOURCE.DATASET.AZURE_TABLE"
+    assert ResourceType.STORAGE_ACCOUNT == "ds.resource.linked_service.azure_storage_account"
+    assert ResourceType.BLOB == "ds.resource.dataset.azure_blob"
+    assert ResourceType.TABLE == "ds.resource.dataset.azure_table"
     assert ResourceType.BLOB != ResourceType.TABLE
     assert ResourceType.STORAGE_ACCOUNT != ResourceType.TABLE

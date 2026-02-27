@@ -36,10 +36,10 @@ Example (AzureBlob):
     ...         blob_name="path/to/example_file.csv",
     ...         prefix=None, # for multiple blobs, provide a prefix instead of blob_name
     ...         create=CreateSettings(
-    ...            overite_blob_if_exists=True,  # overwrite existing blob or raise an error.
+    ...            overwrite_blob_if_exists=True,  # overwrite existing blob or raise an error.
     ...            new_container=True # create container if missing or raise an error.
     ...         ),
-    ...         delete=DeleteSettings(
+    ...         purge=DeleteSettings(
     ...            delete_container=True # delete the container or only delete the blob
     ...         ),
     ...     ),

@@ -18,11 +18,13 @@ Prerequisites:
 import os
 import uuid
 
+import pandas as pd
 from ds_resource_plugin_py_lib.common.resource.dataset import DatasetStorageFormatType
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
-from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, CreateSettings, DeleteSettings
+from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, CreateSettings, PurgeSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -39,7 +41,7 @@ def main():
                 overwrite_blob_if_exists=True,  # if True, it will overwrite the blob if it already exists. If False, it will raise an error if the blob already exists. default is True.
                 new_container=True,  # if True, it will create a new container if the specified container does not exist. If False, it will raise an error if the container does not exist. default is True.
             ),
-            delete=DeleteSettings(
+            purge=PurgeSettings(
                 delete_container=True  # if True, it will delete the container, If False, it will only delete the blob. default is False.
             ),
         ),
@@ -60,12 +62,24 @@ def main():
     dataset.linked_service.connect()
     dataset.linked_service.test_connection()
 
+    dataset.input = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "name": ["Alice", "Bob", "Charlie"],
+            "age": [25, 30, 35],
+        }
+    )
+    dataset.create()
     dataset.read()
     print(dataset.output)
 
     dataset.delete()
-    dataset.read()
-    print(dataset.output)
+    try:
+        dataset.read()
+        print(dataset.output)
+    except ReadError as e:
+        assert e.status_code == 404
+        print("Blobs have been deleted and cannot be read.")
 
 
 if __name__ == "__main__":

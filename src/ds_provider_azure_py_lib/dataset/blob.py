@@ -19,7 +19,7 @@ Example:
     ...            new_container=True # create a new container or raise an error
     ...         ),
     ...         delete=DeleteSettings(
-    ...            delete_container=True # delete the container or only delete the blob.
+    ...            delete_container=True # confirm deletion of the container via delete() method
     ...         ),
     ...     ),
     ...     linked_service=AzureLinkedService(
@@ -41,6 +41,7 @@ Example:
     >>> blob_data = azure_blob.output
 """
 
+import builtins
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
 
@@ -60,7 +61,12 @@ from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
 )
 from ds_resource_plugin_py_lib.common.resource.dataset.base import TabularDataset
-from ds_resource_plugin_py_lib.common.resource.dataset.errors import CreateError, DeleteError, ReadError
+from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
+    CreateError,
+    DeleteError,
+    ReadError,
+)
+from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
@@ -91,12 +97,17 @@ class CreateSettings:
 
 
 @dataclass(kw_only=True)
-class DeleteSettings:
+class PurgeSettings:
     """
-    Settings for delete operations.
+    Settings for purge operations
     """
 
-    delete_container: bool = False  # confirm deletion of the entire container
+    delete_container: bool = False
+    """
+    Confirm deletion of the entire container when purge() is called.
+    If True, delete() will delete the container.
+    If False, delete() will remove all blobs from the container but keep the container itself.
+    """
 
 
 @dataclass(kw_only=True)
@@ -108,7 +119,7 @@ class AzureBlobDatasetSettings(DatasetSettings):
     if specifying both, only `blob_name` will be considered.
     `prefix` is not used for create(); it can be called only with `blob_name`.
     `create` by default (if not passed) will attempt to create the container if it does not exist.
-    `delete` by default (if not passed) will delete only the specified blob(s), not the entire container.
+    `delete()` removes specific blob(s) by name or prefix.
     """
 
     container_name: str
@@ -116,7 +127,7 @@ class AzureBlobDatasetSettings(DatasetSettings):
     prefix: str | None = None
 
     create: CreateSettings = field(default_factory=CreateSettings)
-    delete: DeleteSettings = field(default_factory=DeleteSettings)
+    purge: PurgeSettings = field(default_factory=PurgeSettings)
 
 
 AzureBlobDatasetSettingsType = TypeVar(
@@ -165,7 +176,7 @@ class AzureBlob(
         Returns:
             ItemPaged[BlobProperties]: An iterable of BlobProperties matching the prefix.
         """
-        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
             self.settings.container_name
         )
         return container_client.list_blobs(name_starts_with=prefix)
@@ -183,7 +194,7 @@ class AzureBlob(
         logger.debug(f"Reading blob: {blob}")
         content = pd.DataFrame()
 
-        blob_client: BlobClient = self.linked_service.blob_service_client.get_blob_client(
+        blob_client: BlobClient = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -191,7 +202,10 @@ class AzureBlob(
             stream = blob_client.download_blob().readall()
         except HttpResponseError as exc:
             logger.error(f"Failed to read blob {blob}: {exc!s}")
-            raise ReadError(f"Failed to read blob {blob}: {exc!s}", details=self.get_details()) from exc
+
+            raise ReadError(
+                f"Failed to read blob {blob}: {exc!s}", details=self.get_details(), status_code=getattr(exc, "status_code", 500)
+            ) from exc
 
         if stream and self.deserializer:
             content = self.deserializer(stream)
@@ -224,7 +238,7 @@ class AzureBlob(
         Returns:
             None
         """
-        container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
             self.settings.container_name
         )
         try:
@@ -236,13 +250,13 @@ class AzureBlob(
             logger.error(f"Failed to create container: {exc!s}")
             raise CreateError(f"Failed to create container in Azure Blob Storage: {exc!s}", details=self.get_details()) from exc
 
-    def _create_blob(self, stream: str, blob: str) -> None:
+    def _create_blob(self, stream: bytes, blob: str) -> None:
         """
         Create a specific blob in the container.
 
         Args:
-            blob: name of the blob to create.
             stream: data stream to upload to the blob.
+            blob: name of the blob to create.
 
         Raises:
             CreateError: If the blob creation fails.
@@ -250,7 +264,7 @@ class AzureBlob(
         Returns:
             None
         """
-        blob_client = self.linked_service.blob_service_client.get_blob_client(
+        blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -277,7 +291,7 @@ class AzureBlob(
             DeleteError: If the blob deletion fails.
         """
         logger.debug(f"Deleting blob: {blob}")
-        blob_client = self.linked_service.blob_service_client.get_blob_client(
+        blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
             container=self.settings.container_name,
             blob=blob,
         )
@@ -332,6 +346,8 @@ class AzureBlob(
         Raises:
             ReadError: If reading the blob(s) fails.
         """
+        self.output = pd.DataFrame()
+
         if self.settings.blob_name:
             self.output = self._read_blob(self.settings.blob_name)
         elif self.settings.prefix:
@@ -353,12 +369,16 @@ class AzureBlob(
         Raises:
             CreateError: If the blob creation fails.
         """
-
         if not self.settings.blob_name:
             raise CreateError("Blob name must be provided for creation.", details=self.get_details(), status_code=400)
 
         if not self.serializer:
             raise CreateError("Data serializer must be provided for creation.", details=self.get_details(), status_code=400)
+
+        # Empty input is a no-op per contract
+        if self.input is None or len(self.input) == 0:
+            self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+            return
 
         if self.settings.create.new_container:
             self._create_container()
@@ -367,13 +387,20 @@ class AzureBlob(
         self._create_blob(stream, blob=self.settings.blob_name)
 
         logger.debug(f"Blob {self.settings.blob_name} created successfully.")
+        self.output = self.input.copy()
 
-    def update(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Update operation is not supported for Azure Blob datasets")
+    def update(self) -> NoReturn:
+        raise NotSupportedError("Update operation is not supported for Azure Blob datasets")
 
-    def delete(self, **_kwargs: Any) -> None:
+    def list(self) -> NoReturn:
+        raise NotSupportedError("List operation is not supported for Azure Blob datasets")
+
+    def purge(self, **_kwargs: Any) -> None:
         """
-        Deletes a specific blob in the container.
+        Purge (remove all content from) the container.
+
+        For Azure Blob Storage, this deletes all blobs from the container,
+        leaving the container empty. The container itself is not deleted.
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
@@ -382,12 +409,12 @@ class AzureBlob(
             None
 
         Raises:
-            DeleteError: If the blob deletion fails.
+            DeleteError: If the purge operation fails.
         """
-        if self.settings.delete.delete_container:
-            container_client: ContainerClient = self.linked_service.blob_service_client.get_container_client(
-                self.settings.container_name
-            )
+        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
+            self.settings.container_name
+        )
+        if self.settings.purge.delete_container:
             try:
                 container_client.delete_container()
                 logger.info(f"Container {self.settings.container_name} deleted successfully.")
@@ -396,7 +423,44 @@ class AzureBlob(
                 raise DeleteError(
                     f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
                 ) from exc
-        elif self.settings.blob_name:
+        else:
+            try:
+                # Delete all blobs in the container
+                for blob in container_client.list_blobs():
+                    blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
+                        container=self.settings.container_name,
+                        blob=blob.name,
+                    )
+                    blob_client.delete_blob()
+                logger.info(f"Container {self.settings.container_name} purged successfully (all blobs deleted).")
+            except HttpResponseError as exc:
+                logger.error(f"Failed to purge container {self.settings.container_name}: {exc!s}")
+                raise DeleteError(
+                    f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
+                ) from exc
+
+    def upsert(self) -> NoReturn:
+        raise NotSupportedError("Upsert operation is not supported for Azure Blob datasets")
+
+    def delete(self, **_kwargs: Any) -> None:
+        """
+        Delete specific blob(s) or the entire container from Azure Blob Storage.
+
+        For Azure Blob Storage, a "row" is a blob. This method deletes:
+        - Specific blob by blob_name
+        - Multiple blobs by prefix
+        - Entire container if delete_container=True and no blob_name/prefix provided
+
+        Args:
+            _kwargs: Additional keyword arguments to pass to the request. (not used)
+
+        Returns:
+            None
+
+        Raises:
+            DeleteError: If the deletion fails or requirements not met.
+        """
+        if self.settings.blob_name:
             blob_name = self.settings.blob_name
             self._delete_blob(blob_name)
             logger.info(f"Blob {blob_name} deleted successfully.")
@@ -406,11 +470,15 @@ class AzureBlob(
             logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
         else:
             raise DeleteError(
-                "Either blob name or prefix must be provided for deletion.", details=self.get_details(), status_code=400
+                "Either blob name or prefix must be provided, or delete_container=True must be set for deletion.",
+                details=self.get_details(),
+                status_code=400,
             )
 
-    def rename(self, **_kwargs: Any) -> NoReturn:
-        raise NotImplementedError("Rename operation is not supported for Azure Blob datasets")
+        self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+
+    def rename(self) -> NoReturn:
+        raise NotSupportedError("Rename operation is not supported for Azure Blob datasets")
 
     def close(self) -> None:
         """
@@ -422,7 +490,7 @@ class AzureBlob(
         pass
 
     @staticmethod
-    def concat(dfs: list[pd.DataFrame]) -> pd.DataFrame:
+    def concat(dfs: builtins.list[pd.DataFrame]) -> pd.DataFrame:
         """
         concatenate a list of dataframes into a single dataframe.
 

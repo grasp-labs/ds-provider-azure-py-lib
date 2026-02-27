@@ -6,11 +6,11 @@ Constants for Azure provider.
 
 Example:
     >>> ResourceType.STORAGE_ACCOUNT
-    'DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT'
+    'ds.resource.linked_service.azure_storage_account'
     >>> ResourceType.BLOB
-    'DS.RESOURCE.DATASET.AZURE_BLOB'
+    'ds.resource.dataset.azure_blob'
     >>> ResourceType.TABLE
-    'DS.RESOURCE.DATASET.AZURE_TABLE'
+    'ds.resource.dataset.azure_table'
 """
 
 from enum import StrEnum
@@ -21,6 +21,6 @@ class ResourceType(StrEnum):
     Constants definitions for Azure provider.
     """
 
-    BLOB = "DS.RESOURCE.DATASET.AZURE_BLOB"
-    TABLE = "DS.RESOURCE.DATASET.AZURE_TABLE"
-    STORAGE_ACCOUNT = "DS.RESOURCE.LINKED_SERVICE.AZURE_STORAGE_ACCOUNT"
+    BLOB = "ds.resource.dataset.azure_blob"
+    TABLE = "ds.resource.dataset.azure_table"
+    STORAGE_ACCOUNT = "ds.resource.linked_service.azure_storage_account"
