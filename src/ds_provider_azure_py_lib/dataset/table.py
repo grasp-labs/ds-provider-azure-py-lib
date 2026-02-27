@@ -61,6 +61,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     UpdateError,
     UpsertError,
 )
+from ds_resource_plugin_py_lib.common.resource.errors import ValidationError
 
 from ..enums import ResourceType
 from ..linked_service.storage_account import AzureLinkedService
@@ -197,7 +198,7 @@ class AzureTable(
 
         required_columns = {"PartitionKey", "RowKey"}
         if not required_columns.issubset(content.columns):
-            raise DatasetException(
+            raise ValidationError(
                 f"The DataFrame must contain the columns: {', '.join(required_columns)}",
                 status_code=400,
                 details=self.get_details(),
@@ -239,6 +240,8 @@ class AzureTable(
             entity_df = pd.DataFrame([row])
             try:
                 entity: dict[str, Any] = self._prepare_content(entity_df)
+            except ValidationError as exc:
+                raise exc
             except DatasetException as exc:
                 if operation == "create":
                     raise CreateError(message=str(exc), status_code=exc.status_code, details=self.get_details()) from exc
@@ -417,7 +420,15 @@ class AzureTable(
 
         transaction = self._build_transaction_from_input("delete")
         logger.debug(f"Deleting entities: {len(transaction)} items")
-        self._submit_transaction(transaction, DeleteError)
+        try:
+            self._submit_transaction(transaction, DeleteError)
+        except DeleteError as exc:
+            if exc.status_code == 404:
+                logger.warning("Entity not found during delete operation.")
+            else:
+                raise DeleteError(
+                    message=exc.message, status_code=getattr(exc, "status_code", 500), details=self.get_details()
+                ) from exc
         logger.info("Successfully deleted entities.")
         self.output = self.input.copy()
 
@@ -469,10 +480,13 @@ class AzureTable(
                     self._submit_transaction(transaction, DeleteError)
                 logger.info(f"Successfully purged all entities from table {self.settings.table_name}.")
             except HttpResponseError as exc:
-                raise DeleteError(
-                    f"Failed to purge entities from table {self.settings.table_name}: {exc!s}",
-                    details=self.get_details(),
-                ) from exc
+                if exc.status_code == 404:
+                    logger.warning(f"Table {self.settings.table_name} not found during purge. Treating as already purged.")
+                else:
+                    raise DeleteError(
+                        f"Failed to purge entities from table {self.settings.table_name}: {exc!s}",
+                        details=self.get_details(),
+                    ) from exc
 
     def upsert(self, **_kwargs: Any) -> None:
         # Empty input is a no-op per contract

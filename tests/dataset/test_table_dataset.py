@@ -24,9 +24,8 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     DatasetException,
     DeleteError,
     ReadError,
-    UpdateError,
-    UpsertError,
 )
+from ds_resource_plugin_py_lib.common.resource.errors import ValidationError
 
 from ds_provider_azure_py_lib.dataset.table import (
     AzureTable,
@@ -75,7 +74,7 @@ def test_prepare_content_validations_and_serializer_json_conversion():
 
     # missing required columns -> NotImplementedError
     content_2 = pd.DataFrame([{"PartitionKey": "p"}])
-    with pytest.raises(DatasetException):
+    with pytest.raises(ValidationError):
         ds._prepare_content(content_2)
 
     # serializer None -> ValueError
@@ -215,13 +214,13 @@ def test_build_transaction_from_input_maps_errors():
         version="0.0.1",
     )
     ds.input = pd.DataFrame([{"PartitionKey": "p"}])
-    with pytest.raises(CreateError):
+    with pytest.raises(ValidationError):
         ds._build_transaction_from_input("create")
-    with pytest.raises(UpdateError):
+    with pytest.raises(ValidationError):
         ds._build_transaction_from_input("update")
-    with pytest.raises(UpsertError):
+    with pytest.raises(ValidationError):
         ds._build_transaction_from_input("upsert")
-    with pytest.raises(DeleteError):
+    with pytest.raises(ValidationError):
         ds._build_transaction_from_input("delete")
 
 

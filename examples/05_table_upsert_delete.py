@@ -22,11 +22,8 @@ Prerequisites:
 
 import os
 import uuid
-from datetime import date, time
 
-import numpy as np
 import pandas as pd
-from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
 from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings
@@ -94,11 +91,18 @@ def main():
 
     dataset.input = pd.DataFrame({
         "PartitionKey": ["colors"],
-        "RowKey": ["2"],
+        "RowKey": ["9"],
+        "StringColumn": ["abcd"],
+        "IntColumn": [99],
     })
-
     dataset.delete()
-    print("\nEntity with  deleted successfully!")
+    print("This should raise warning")
+
+    dataset.input = pd.DataFrame({
+        "PartitionKey": ["colors"],
+    })
+    dataset.delete()
+    print("\nEntity  deleted successfully!")
     print("\nReading remaining entities from table...")
     dataset.read()
     print(dataset.output)
