@@ -72,23 +72,10 @@ def test_prepare_content_validations_and_serializer_json_conversion():
         version="0.0.1",
     )
 
-    # missing required columns -> NotSupportedError
+    # missing required columns -> ValidationError
     content_2 = pd.DataFrame([{"PartitionKey": "p"}])
     with pytest.raises(ValidationError):
         ds._prepare_content(content_2)
-
-    # serializer None -> ValueError
-    ds2 = AzureTable(
-        settings=AzureTableDatasetSettings(table_name="t"),
-        linked_service=linked,
-        serializer=None,
-        id=uuid.uuid4(),
-        name="testazurepackage",
-        version="0.0.1",
-    )
-    content_3 = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
-    with pytest.raises(DatasetException):
-        ds2._prepare_content(content_3)
 
     # successful serialization: RowKey/PartitionKey to str, dict value to JSON
     ds3 = AzureTable(
@@ -579,8 +566,6 @@ def test_table_read_without_filter() -> None:
     linked_service.connection = mock_connection
 
     table = AzureTable(
-        deserializer=MagicMock(return_value=pd.DataFrame(mock_entities)),
-        serializer=MagicMock(),
         settings=AzureTableDatasetSettings(table_name="test"),
         linked_service=linked_service,
         id="test-id",
@@ -595,11 +580,13 @@ def test_table_read_without_filter() -> None:
     table.read()
 
     mock_table_client.list_entities.assert_called_once()
-    table.deserializer.assert_called_once()
+    # Verify that output was set (meaning deserializer was called)
+    assert table.output is not None
+    assert isinstance(table.output, pd.DataFrame)
 
 
-def test_table_read_without_deserializer_raises_error() -> None:
-    """Test read() raises ReadError when deserializer is None."""
+def test_table_read_with_default_deserializer() -> None:
+    """Test read() works correctly with default deserializer."""
     mock_table_client = MagicMock()
     mock_entities = [{"PartitionKey": "pk", "RowKey": "rk"}]
     mock_table_client.list_entities.return_value = mock_entities
@@ -614,8 +601,6 @@ def test_table_read_without_deserializer_raises_error() -> None:
     linked_service.connection = mock_connection
 
     table = AzureTable(
-        deserializer=None,
-        serializer=MagicMock(),
         settings=AzureTableDatasetSettings(table_name="test"),
         linked_service=linked_service,
         id="test-id",
@@ -625,8 +610,10 @@ def test_table_read_without_deserializer_raises_error() -> None:
     )
     table.settings.read.query_filter = None
 
-    with pytest.raises(ReadError, match="Deserializer is not initialized"):
-        table.read()
+    # Should not raise and should successfully deserialize
+    table.read()
+    assert table.output is not None
+    assert isinstance(table.output, pd.DataFrame)
 
 
 def test_table_purge_deletes_all_entities() -> None:

@@ -59,6 +59,7 @@ from azure.storage.blob import (
 from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.dataset import (
     DatasetSettings,
+    DatasetStorageFormatType,
 )
 from ds_resource_plugin_py_lib.common.resource.dataset.base import TabularDataset
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
@@ -153,8 +154,10 @@ class AzureBlob(
     linked_service: AzureLinkedServiceType
     settings: AzureBlobDatasetSettingsType
 
-    serializer: PandasSerializer
-    deserializer: PandasDeserializer
+    serializer: PandasSerializer | None = field(default_factory=lambda: PandasSerializer(format=DatasetStorageFormatType.JSON))
+    deserializer: PandasDeserializer | None = field(
+        default_factory=lambda: PandasDeserializer(format=DatasetStorageFormatType.JSON)
+    )
 
     @property
     def type(self) -> ResourceType:

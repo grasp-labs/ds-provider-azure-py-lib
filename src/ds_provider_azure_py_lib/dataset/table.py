@@ -9,8 +9,6 @@ on table entities using pandas DataFrames for data representation.
 
 Example:
     >>> azure_table = AzureTable(
-    ...     deserializer=AzureTableDeserializer(),
-    ...     serializer=AzureTableSerializer(),
     ...     settings=AzureTableDatasetSettings(
     ...         table_name="users",
     ...         partition_key="partition_key",
@@ -152,12 +150,9 @@ class AzureTable(
     linked_service: AzureLinkedServiceType
     settings: AzureTableDatasetSettingsType
 
-    serializer: AzureTableSerializer = field(
-        default_factory=AzureTableSerializer,
-    )
-    deserializer: AzureTableDeserializer = field(
-        default_factory=AzureTableDeserializer,
-    )
+    def __post_init__(self) -> None:
+        self.serializer = AzureTableSerializer()
+        self.deserializer = AzureTableDeserializer()
 
     @property
     def type(self) -> ResourceType:
