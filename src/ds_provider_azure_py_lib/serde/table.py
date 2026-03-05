@@ -62,7 +62,7 @@ class AzureTableDeserializer(DataDeserializer):
         data = []
         for entity in value:
             entity_data = {key: entity[key] for key in entity}
-            if "Timestamp" not in entity_data:
+            if "Timestamp" not in entity_data and hasattr(entity, "metadata") and "timestamp" in entity.metadata:
                 entity_data["Timestamp"] = entity.metadata["timestamp"]
             data.append(entity_data)
 

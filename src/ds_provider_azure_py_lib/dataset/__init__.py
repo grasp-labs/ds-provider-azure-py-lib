@@ -8,8 +8,6 @@ This module implements a datasets for Azure.
 
 Example (AzureTable):
     >>> azure_table = AzureTable(
-    ...     deserializer=AzureTableDeserializer(),
-    ...     serializer=AzureTableSerializer(),
     ...     settings=AzureTableDatasetSettings(
     ...         table_name="users",
     ...         partition_key="partition_key",
