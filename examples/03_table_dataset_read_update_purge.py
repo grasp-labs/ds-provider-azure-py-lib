@@ -139,10 +139,6 @@ def main():
         dataset.purge()
         print("Delete completed successfully!")
 
-        print("Waiting 30 seconds for deletion to propagate...")
-        import time as t
-        t.sleep(30)  # Wait for deletion to propagate
-
         try:
             dataset.read()
             remaining_count = len(dataset.output)
@@ -152,6 +148,7 @@ def main():
             print(dataset.output)
         except ReadError:
             print("Table deleted successfully")
+    dataset.create()
 
 
 if __name__ == "__main__":

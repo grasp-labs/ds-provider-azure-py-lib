@@ -38,6 +38,7 @@ Example:
 """
 
 import builtins
+import time as t
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
@@ -46,6 +47,7 @@ import pandas as pd
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
+    ResourceNotFoundError,
 )
 from azure.data.tables import TableClient, TableTransactionError, UpdateMode
 from ds_common_logger_py_lib import Logger
@@ -107,6 +109,13 @@ class PurgeSettings:
 
 
 @dataclass(kw_only=True)
+class CreateSettings:
+    sleep_seconds_between_retries: int = 30
+    retry_on_table_being_deleted: bool = True
+    retries_number: int = 10
+
+
+@dataclass(kw_only=True)
 class AzureTableDatasetSettings(DatasetSettings):
     """
     Settings for Azure Table Storage dataset operations.
@@ -127,6 +136,7 @@ class AzureTableDatasetSettings(DatasetSettings):
 
     By default, read() will use read without filter.
     """
+    create: CreateSettings = field(default_factory=lambda: CreateSettings())
 
 
 AzureTableDatasetSettingsType = TypeVar(
@@ -315,10 +325,16 @@ class AzureTable(
                 table_name=self.settings.table_name,
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
-        except ResourceExistsError:
-            logger.debug(f"Table ({self.settings.table_name}) already exists.")
+        except ResourceExistsError as exc:
+            if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
+                self._retry_create()
+            else:
+                logger.debug(f"Table ({self.settings.table_name}) already exists.")
         except HttpResponseError as exc:
-            raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
+            if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
+                self._retry_create()
+            else:
+                raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
     def read(self, **_kwargs: Any) -> None:
         """
@@ -463,6 +479,7 @@ class AzureTable(
         if self.settings.purge.delete_table:
             # Delete the entire table
             self._delete_table()
+            self._wait_for_table_deletion()
         else:
             # Delete all entities from the table
             try:
@@ -521,3 +538,36 @@ class AzureTable(
             details["delete_table"] = str(purge_settings.delete_table)
 
         return details
+
+    def _wait_for_table_deletion(self) -> None:
+        for _ in range(10):
+            table_client = self._get_table_client()
+            entities = table_client.list_entities()
+            try:
+                for entity in entities:
+                    _ = entity
+            except ResourceNotFoundError as exc:
+                if getattr(exc, "error_code", None) == "TableNotFound":
+                    logger.info("Confirmed table deletion.")
+                    return
+            t.sleep(3)
+
+    def _retry_create(self) -> None:
+        for _ in range(self.settings.create.retries_number):
+            try:
+                self.linked_service.connection.table_service_client.create_table(table_name=self.settings.table_name)
+                logger.info(f"Table ({self.settings.table_name}) successfully created after waiting for deletion.")
+                return
+            except (ResourceExistsError, HttpResponseError) as inner_exc:
+                if getattr(inner_exc, "error_code", None) == "TableBeingDeleted":
+                    logger.debug(f"Table ({self.settings.table_name}) is still being deleted. Waiting before retrying...")
+                    t.sleep(self.settings.create.sleep_seconds_between_retries)
+                elif isinstance(inner_exc, ResourceExistsError):
+                    logger.debug(f"Table ({self.settings.table_name}) already exists.")
+                    return
+                else:
+                    logger.error(f"Failed to create table ({self.settings.table_name}) after deletion: {inner_exc.message}")
+                    raise CreateError(
+                        f"Failed to create table in Azure Table Storage after waiting for deletion: {inner_exc!s}",
+                        details=self.get_details(),
+                    ) from inner_exc
