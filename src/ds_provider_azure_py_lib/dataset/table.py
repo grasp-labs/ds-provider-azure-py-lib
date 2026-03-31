@@ -325,12 +325,7 @@ class AzureTable(
                 table_name=self.settings.table_name,
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
-        except ResourceExistsError as exc:
-            if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
-                self._retry_create()
-            else:
-                logger.debug(f"Table ({self.settings.table_name}) already exists.")
-        except HttpResponseError as exc:
+        except (ResourceExistsError, HttpResponseError) as exc:
             if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
                 self._retry_create()
             else:
@@ -563,11 +558,19 @@ class AzureTable(
                     logger.debug(f"Table ({self.settings.table_name}) is still being deleted. Waiting before retrying...")
                     t.sleep(self.settings.create.sleep_seconds_between_retries)
                 elif isinstance(inner_exc, ResourceExistsError):
-                    logger.debug(f"Table ({self.settings.table_name}) already exists.")
-                    return
+                    raise CreateError(
+                        f"Failed to create table in Azure Table Storage. Table ({self.settings.table_name}) already exists.",
+                        details=self.get_details(),
+                    ) from inner_exc
                 else:
                     logger.error(f"Failed to create table ({self.settings.table_name}) after deletion: {inner_exc.message}")
                     raise CreateError(
                         f"Failed to create table in Azure Table Storage after waiting for deletion: {inner_exc!s}",
                         details=self.get_details(),
                     ) from inner_exc
+
+        raise CreateError(
+            f"Failed to create table in Azure Table Storage after {self.settings.create.retries_number} retries"
+            f" waiting for deletion.",
+            details=self.get_details(),
+        )
