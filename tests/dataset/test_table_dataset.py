@@ -937,6 +937,7 @@ def test_wait_for_table_deletion_confirms_deletion(monkeypatch):
 
 def test_wait_for_table_deletion_iterates_entities_before_confirming(monkeypatch):
     table = _make_table_with_settings()
+    table.settings.purge.wait_after_table_deletion = True
 
     class FakeResourceNotFoundError(ResourceNotFoundError):
         def __init__(self):

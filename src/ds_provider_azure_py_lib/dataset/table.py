@@ -106,13 +106,36 @@ class PurgeSettings:
     If True, the entire table will be deleted when purge() is called.
     If False, only the table content will be deleted.
     """
+    wait_after_table_deletion: bool = False
+    """
+    If True, waits for confirmation that the table has been deleted after the delete_table operation.
+    If False, returns immediately after initiating the deletion.
+    """
+    delete_table_wait_retries: int = 10
+    """
+    Maximum number of retries to wait for table deletion confirmation before giving up.
+    """
+    delete_table_sleep_seconds_between_retries: int = 3
+    """
+    Number of seconds to sleep between retry attempts when waiting for table deletion confirmation.
+    """
 
 
 @dataclass(kw_only=True)
 class CreateSettings:
     sleep_seconds_between_retries: int = 30
+    """
+    Number of seconds to sleep between retry attempts when creating a table.
+    """
     retry_on_table_being_deleted: bool = True
+    """
+    If True, retries table creation when the table is being deleted.
+    If False, raises an error immediately.
+    """
     retries_number: int = 10
+    """
+    Maximum number of retries to attempt when creating a table.
+    """
 
 
 @dataclass(kw_only=True)
@@ -535,7 +558,10 @@ class AzureTable(
         return details
 
     def _wait_for_table_deletion(self) -> None:
-        for _ in range(10):
+        if not self.settings.purge.wait_after_table_deletion:
+            return
+
+        for _ in range(self.settings.purge.delete_table_wait_retries):
             table_client = self._get_table_client()
             entities = table_client.list_entities()
             try:
@@ -545,7 +571,8 @@ class AzureTable(
                 if getattr(exc, "error_code", None) == "TableNotFound":
                     logger.info("Confirmed table deletion.")
                     return
-            t.sleep(3)
+            t.sleep(self.settings.purge.delete_table_sleep_seconds_between_retries)
+        logger.debug("Table deletion not confirmed after waiting.")
 
     def _retry_create(self) -> None:
         for _ in range(self.settings.create.retries_number):
