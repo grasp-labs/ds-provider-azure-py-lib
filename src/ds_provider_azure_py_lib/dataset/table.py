@@ -561,7 +561,8 @@ class AzureTable(
         if not self.settings.purge.wait_after_table_deletion:
             return
 
-        for _ in range(self.settings.purge.delete_table_wait_retries):
+        retries = self.settings.purge.delete_table_wait_retries
+        for attempt in range(retries):
             table_client = self._get_table_client()
             entities = table_client.list_entities()
             try:
@@ -571,8 +572,9 @@ class AzureTable(
                 if getattr(exc, "error_code", None) == "TableNotFound":
                     logger.info("Confirmed table deletion.")
                     return
-            t.sleep(self.settings.purge.delete_table_sleep_seconds_between_retries)
-        logger.debug("Table deletion not confirmed after waiting.")
+            if attempt < retries - 1:
+                t.sleep(self.settings.purge.delete_table_sleep_seconds_between_retries)
+        logger.error("Table deletion not confirmed after waiting.")
 
     def _retry_create(self) -> None:
         for _ in range(self.settings.create.retries_number):
