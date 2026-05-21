@@ -568,6 +568,7 @@ class AzureTable(
             try:
                 for entity in entities:
                     _ = entity
+                    break  # no need to check all entities, if any are found, the table is not yet deleted
             except ResourceNotFoundError as exc:
                 if getattr(exc, "error_code", None) == "TableNotFound":
                     logger.info("Confirmed table deletion.")
