@@ -18,9 +18,9 @@ Example:
     ...            overwrite_blob_if_exists=True, # overwrite the blob that already exists or raise an error
     ...            new_container=True # create a new container or raise an error
     ...         ),
-    ...         delete=DeleteSettings(
-    ...            delete_container=True # confirm deletion of the container via delete() method
-    ...         ),
+        ...         purge=PurgeSettings(
+        ...            delete_container=True # confirm deletion of the container via purge()
+        ...         ),
     ...     ),
     ...     linked_service=AzureLinkedService(
     ...         settings=AzureLinkedServiceSettings(
@@ -49,6 +49,7 @@ import pandas as pd
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
+    ResourceNotFoundError,
 )
 from azure.core.paging import ItemPaged
 from azure.storage.blob import (
@@ -106,8 +107,8 @@ class PurgeSettings:
     delete_container: bool = False
     """
     Confirm deletion of the entire container when purge() is called.
-    If True, delete() will delete the container.
-    If False, delete() will remove all blobs from the container but keep the container itself.
+    If True, purge() will delete the container before considering blob_name.
+    If False, purge() will purge the configured blob if blob_name is set.
     """
 
 
@@ -116,11 +117,10 @@ class AzureBlobDatasetSettings(DatasetSettings):
     """
     Settings for Azure Blob Storage dataset operations.
 
-    Exactly one of `blob_name` or `prefix` must be provided for read()/delete();
+    Exactly one of `blob_name` or `prefix` must be provided for read();
     if specifying both, only `blob_name` will be considered.
     `prefix` is not used for create(); it can be called only with `blob_name`.
     `create` by default (if not passed) will attempt to create the container if it does not exist.
-    `delete()` removes specific blob(s) by name or prefix.
     """
 
     container_name: str
@@ -400,10 +400,11 @@ class AzureBlob(
 
     def purge(self, **_kwargs: Any) -> None:
         """
-        Purge (remove all content from) the container.
+        Purge the configured blob target.
 
-        For Azure Blob Storage, this deletes all blobs from the container,
-        leaving the container empty. The container itself is not deleted.
+        If `delete_container=True`, the container is deleted first.
+        elif `blob_name` is configured, only that blob is deleted.
+        Missing blobs or containers are treated as already purged.
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
@@ -414,45 +415,35 @@ class AzureBlob(
         Raises:
             DeleteError: If the purge operation fails.
         """
-        container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
-            self.settings.container_name
-        )
         if self.settings.purge.delete_container:
+            container_client: ContainerClient = self.linked_service.connection.blob_service_client.get_container_client(
+                self.settings.container_name
+            )
             try:
                 container_client.delete_container()
                 logger.info(f"Container {self.settings.container_name} deleted successfully.")
-            except HttpResponseError as exc:
+            except (HttpResponseError, ResourceNotFoundError) as exc:
+                if getattr(exc, "status_code", None) == 404 or isinstance(exc, ResourceNotFoundError):
+                    logger.info(f"Container {self.settings.container_name} already deleted.")
+                    return
                 logger.error(f"Failed to delete container {self.settings.container_name}: {exc!s}")
                 raise DeleteError(
                     f"Failed to delete container {self.settings.container_name}: {exc!s}", details=self.get_details()
                 ) from exc
-        else:
-            try:
-                # Delete all blobs in the container
-                for blob in container_client.list_blobs():
-                    blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
-                        container=self.settings.container_name,
-                        blob=blob.name,
-                    )
-                    blob_client.delete_blob()
-                logger.info(f"Container {self.settings.container_name} purged successfully (all blobs deleted).")
-            except HttpResponseError as exc:
-                logger.error(f"Failed to purge container {self.settings.container_name}: {exc!s}")
-                raise DeleteError(
-                    f"Failed to purge container {self.settings.container_name}: {exc!s}", details=self.get_details()
-                ) from exc
+            return
+        elif self.settings.blob_name:
+            self._delete_blob_if_exists(self.settings.blob_name)
+            logger.info(f"Blob {self.settings.blob_name} purged successfully.")
+            return
+
+        logger.warning(f"No blob_name configured for purge on container {self.settings.container_name}; no action taken.")
 
     def upsert(self) -> NoReturn:
         raise NotSupportedError("Upsert operation is not supported for Azure Blob datasets")
 
     def delete(self, **_kwargs: Any) -> None:
         """
-        Delete specific blob(s) or the entire container from Azure Blob Storage.
-
-        For Azure Blob Storage, a "row" is a blob. This method deletes:
-        - Specific blob by blob_name
-        - Multiple blobs by prefix
-        - Entire container if delete_container=True and no blob_name/prefix provided
+        Delete is not supported for Azure Blob datasets.
 
         Args:
             _kwargs: Additional keyword arguments to pass to the request. (not used)
@@ -461,24 +452,30 @@ class AzureBlob(
             None
 
         Raises:
-            DeleteError: If the deletion fails or requirements not met.
+            NotSupportedError: Always.
         """
-        if self.settings.blob_name:
-            blob_name = self.settings.blob_name
-            self._delete_blob(blob_name)
-            logger.info(f"Blob {blob_name} deleted successfully.")
-        elif self.settings.prefix:
-            prefix = self.settings.prefix
-            self._delete_blobs(prefix)
-            logger.info(f"Blobs with prefix '{prefix}' deleted successfully from container '{self.settings.container_name}'.")
-        else:
-            raise DeleteError(
-                "Either blob name or prefix must be provided, or delete_container=True must be set for deletion.",
-                details=self.get_details(),
-                status_code=400,
-            )
+        raise NotSupportedError("Delete operation is not supported for Azure Blob datasets")
 
-        self.output = self.input.copy() if self.input is not None else pd.DataFrame()
+    def _delete_blob_if_exists(self, blob: str) -> None:
+        """
+        Delete a blob during purge and treat missing blobs as already purged.
+
+        Args:
+            blob: name of the blob to delete.
+        """
+        logger.debug(f"Purging blob: {blob}")
+        blob_client = self.linked_service.connection.blob_service_client.get_blob_client(
+            container=self.settings.container_name,
+            blob=blob,
+        )
+        try:
+            blob_client.delete_blob()
+        except (HttpResponseError, ResourceNotFoundError) as exc:
+            if getattr(exc, "status_code", None) == 404 or isinstance(exc, ResourceNotFoundError):
+                logger.info(f"Blob {blob} already purged.")
+                return
+            logger.error(f"Failed to purge blob {blob}: {exc!s}")
+            raise DeleteError(f"Failed to purge blob {blob}: {exc!s}", details=self.get_details()) from exc
 
     def rename(self) -> NoReturn:
         raise NotSupportedError("Rename operation is not supported for Azure Blob datasets")
