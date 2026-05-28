@@ -73,7 +73,7 @@ def main():
     dataset.read()
     print(dataset.output)
 
-    dataset.delete()
+    dataset.purge()
     try:
         dataset.read()
         print(dataset.output)
