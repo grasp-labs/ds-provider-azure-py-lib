@@ -183,6 +183,13 @@ def _make_table_transaction_error():
     return TableTransactionError(message="boom", response=MagicMock())
 
 
+def _make_table_not_found_transaction_error():
+    err = TableTransactionError(message="0:The table specified does not exist.", response=MagicMock())
+    err.message = "0:The table specified does not exist."
+    err.status_code = 404
+    return err
+
+
 def _make_linked_service_and_table_client():
     table_client = MagicMock(spec=TableClient)
     svc = MagicMock(spec=TableServiceClient)
@@ -279,7 +286,14 @@ def test_create_table_handles_exists_and_http_error():
     )
     ds._create_table()
     svc.create_table.assert_called_once()
-    svc.create_table.side_effect = HttpResponseError(error_code="TableAlreadyExists", message="x")
+    svc.create_table.side_effect = ResourceExistsError()
+    ds._create_table()
+    conflict = HttpResponseError(message="x")
+    conflict.error_code = "TableAlreadyExists"
+    conflict.status_code = 409
+    svc.create_table.side_effect = conflict
+    ds._create_table()
+    svc.create_table.side_effect = HttpResponseError(message="x")
     with pytest.raises(CreateError):
         ds._create_table()
 
@@ -369,6 +383,52 @@ def test_create_success_table_transaction_and_http_error():
     ds._submit_transaction = MagicMock(side_effect=HttpResponseError(message="x"))
     with pytest.raises(CreateError):
         ds.create()
+
+
+def test_create_retries_when_table_is_not_found_after_purge():
+    linked, table_client, svc = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(
+            table_name="t",
+            purge=PurgeSettings(delete_table=True),
+            create=CreateSettings(retries_number=1, sleep_seconds_between_retries=0),
+        ),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+
+    ds.purge()
+
+    table_client.submit_transaction.side_effect = [_make_table_not_found_transaction_error(), None]
+
+    with patch("time.sleep"):
+        ds.create()
+
+    svc.delete_table.assert_called_once_with(table_name="t")
+    assert table_client.submit_transaction.call_count == 2
+    assert ds.output.equals(ds.input)
+
+
+def test_create_allows_existing_table_and_submits_entities():
+    linked, table_client, svc = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+    svc.create_table.side_effect = ResourceExistsError()
+
+    ds.create()
+
+    svc.create_table.assert_called_once_with(table_name="t")
+    table_client.submit_transaction.assert_called_once()
+    assert ds.output.equals(ds.input)
 
 
 def test_update_calls_submit_with_merge_mode():
@@ -895,13 +955,13 @@ def test_retry_create_gives_up_and_raises():
         table._retry_create()
 
 
-def test_retry_create_raises_when_table_already_exists_after_waiting():
+def test_retry_create_noops_when_table_already_exists_after_waiting():
     table = _make_table_with_settings(retries=1)
     svc = table.linked_service.connection.table_service_client
     svc.create_table = MagicMock(side_effect=ResourceExistsError(message="exists"))
 
-    with pytest.raises(CreateError, match="already exists"):
-        table._retry_create()
+    table._retry_create()
+    svc.create_table.assert_called_once()
 
 
 def test_retry_create_exhausts_retries_on_table_being_deleted():

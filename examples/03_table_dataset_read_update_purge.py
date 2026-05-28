@@ -120,7 +120,7 @@ def main():
     if not dataset.output.empty:
         print("\nTesting update operation...")
         dataset.input = dataset.output.copy()
-        dataset.input["Score"] = [99.5, 97.0]  # Modify some data
+        dataset.input["Score"] = [r/2 for r in dataset.input["Score"]]
         dataset.update()
         print("Update completed successfully!")
 
