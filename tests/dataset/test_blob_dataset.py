@@ -26,7 +26,7 @@ from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError
 from ds_resource_plugin_py_lib.common.serde.deserialize import PandasDeserializer
 from ds_resource_plugin_py_lib.common.serde.serialize import PandasSerializer
 
-from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, PurgeSettings
+from ds_provider_azure_py_lib.dataset.blob import AzureBlob, AzureBlobDatasetSettings, CreateSettings, PurgeSettings
 from ds_provider_azure_py_lib.enums import ResourceType
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService
 
@@ -563,6 +563,41 @@ class TestAzureBlobDataset2(unittest.TestCase):
         assert kwargs.get("overwrite") is True
         assert "data" in kwargs and kwargs["data"] is not None
 
+    def test_create_skips_container_creation_when_disabled(self):
+        """
+        Test that create() uploads the blob without creating the container when new_container is False.
+        """
+        container_client = MagicMock()
+        blob_client = MagicMock()
+        blob_client.upload_blob.return_value = None
+
+        linked, bs_client = self._make_linked_service_with_clients(
+            container_client=container_client,
+            blob_client=blob_client,
+        )
+
+        ds = AzureBlob(
+            settings=AzureBlobDatasetSettings(
+                container_name="c",
+                blob_name="b",
+                create=CreateSettings(overwrite_blob_if_exists=False, new_container=False),
+            ),
+            serializer=PandasSerializer(format="CSV"),
+            deserializer=PandasDeserializer(format="CSV"),
+            linked_service=linked,
+            id=uuid.uuid4(),
+            name="testazurepackage",
+            version="0.0.1",
+        )
+        ds.input = pd.DataFrame({"x": [1]})
+
+        ds.create()
+
+        bs_client.get_container_client.assert_not_called()
+        bs_client.get_blob_client.assert_called_once_with(container="c", blob="b")
+        blob_client.upload_blob.assert_called_once()
+        assert ds.output.equals(ds.input)
+
     def test_concat_empty(self):
         """
         Test that AzureBlob.concat with an empty list returns an empty DataFrame.
@@ -766,6 +801,19 @@ class TestAzureBlobDataset2(unittest.TestCase):
         blob.purge()
 
         container_client.delete_container.assert_called_once()
+
+    def test_purge_container_http_error_raises_delete_error(self) -> None:
+        """Test that purge() raises DeleteError when container deletion fails with a non-404 HTTP error."""
+
+        blob = self._make_blob(delete_container=True)
+
+        container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
+        failure = HttpResponseError(message="delete failed")
+        failure.status_code = 500
+        container_client.delete_container.side_effect = failure
+
+        with pytest.raises(DeleteError, match="Failed to delete container"):
+            blob.purge()
 
     def test_purge_http_error_raises_delete_error(self) -> None:
         """Test that purge() raises DeleteError on non-404 HTTP error."""
