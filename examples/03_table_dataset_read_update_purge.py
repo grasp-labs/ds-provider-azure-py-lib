@@ -28,7 +28,8 @@ import pandas as pd
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
-from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, PurgeSettings
+from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, \
+    PurgeSettings, CreateSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -50,6 +51,7 @@ def main():
             table_name="testazurepackage",
             read=ReadSettings(query_filter="PartitionKey eq 'colors'"),
             purge=PurgeSettings(delete_table=True, wait_after_table_deletion=True),
+            create=CreateSettings(retry_on_table_being_deleted=True)
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(

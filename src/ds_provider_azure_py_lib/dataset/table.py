@@ -349,11 +349,13 @@ class AzureTable(
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
         except (ResourceExistsError, HttpResponseError) as exc:
-            if self._is_table_already_exists_error(exc):
-                logger.debug(f"Table ({self.settings.table_name}) already exists.")
-                return
             if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
                 self._retry_create()
+
+            elif self._is_table_already_exists_error(exc):
+                logger.debug(f"Table ({self.settings.table_name}) already exists.")
+                return
+
             else:
                 raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
@@ -405,26 +407,16 @@ class AzureTable(
 
         self._create_table()
         transaction = self._build_transaction_from_input("create")
-        for attempt in range(self.settings.create.retries_number + 1):
-            try:
-                self._submit_transaction(transaction, CreateError)
-                self.output = self.input.copy()
-                return
-            except TableTransactionError as exc:
-                create_error = CreateError(
-                    message=exc.message, status_code=getattr(exc, "status_code", 500), details=self.get_details()
-                )
-            except HttpResponseError as _exc:
-                create_error = CreateError("Failed to create entity in Azure Table Storage.", details=self.get_details())
-            except CreateError as exc:
-                create_error = exc
+        try:
+            self._submit_transaction(transaction, CreateError)
+        except TableTransactionError as exc:
+            raise CreateError(
+                message=exc.message, status_code=getattr(exc, "status_code", 500), details=self.get_details()
+            ) from exc
 
-            if self._is_table_not_found_error(create_error) and attempt < self.settings.create.retries_number:
-                logger.debug(f"Table ({self.settings.table_name}) is not available yet. Retrying create operation...")
-                t.sleep(self.settings.create.sleep_seconds_between_retries)
-                self._create_table()
-                continue
-            raise create_error
+        except HttpResponseError as exc:
+            raise CreateError("Failed to create entity in Azure Table Storage.", details=self.get_details()) from exc
+        self.output = self.input.copy()
 
     def update(self, **_kwargs: Any) -> None:
         """
@@ -618,18 +610,4 @@ class AzureTable(
 
     @staticmethod
     def _is_table_already_exists_error(exc: Exception) -> bool:
-        return (
-            isinstance(exc, ResourceExistsError)
-            or getattr(exc, "error_code", None) == "TableAlreadyExists"
-            or getattr(exc, "status_code", None) == 409
-        )
-
-    @staticmethod
-    def _is_table_not_found_error(exc: Exception) -> bool:
-        message = str(getattr(exc, "message", exc))
-        return (
-            getattr(exc, "error_code", None) == "TableNotFound"
-            or getattr(exc, "status_code", None) == 404
-            or "The table specified does not exist." in message
-            or "TableNotFound" in message
-        )
+        return isinstance(exc, ResourceExistsError) or getattr(exc, "error_code", None) == "TableAlreadyExists"

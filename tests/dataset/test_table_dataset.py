@@ -385,33 +385,6 @@ def test_create_success_table_transaction_and_http_error():
         ds.create()
 
 
-def test_create_retries_when_table_is_not_found_after_purge():
-    linked, table_client, svc = _make_linked_service_and_table_client()
-    ds = AzureTable(
-        settings=AzureTableDatasetSettings(
-            table_name="t",
-            purge=PurgeSettings(delete_table=True),
-            create=CreateSettings(retries_number=1, sleep_seconds_between_retries=0),
-        ),
-        linked_service=linked,
-        id=uuid.uuid4(),
-        name="testazurepackage",
-        version="0.0.1",
-    )
-    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
-
-    ds.purge()
-
-    table_client.submit_transaction.side_effect = [_make_table_not_found_transaction_error(), None]
-
-    with patch("time.sleep"):
-        ds.create()
-
-    svc.delete_table.assert_called_once_with(table_name="t")
-    assert table_client.submit_transaction.call_count == 2
-    assert ds.output.equals(ds.input)
-
-
 def test_create_allows_existing_table_and_submits_entities():
     linked, table_client, svc = _make_linked_service_and_table_client()
     ds = AzureTable(
