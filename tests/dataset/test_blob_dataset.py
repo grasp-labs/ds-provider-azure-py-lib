@@ -753,6 +753,20 @@ class TestAzureBlobDataset2(unittest.TestCase):
 
         blob_client.delete_blob.assert_called_once()
 
+    def test_purge_missing_container_is_noop(self) -> None:
+        """Test that purge() does not raise when the configured container is already missing."""
+
+        blob = self._make_blob(delete_container=True)
+
+        container_client = blob.linked_service.connection.blob_service_client.get_container_client.return_value
+        missing = HttpResponseError(message="delete failed")
+        missing.status_code = 404
+        container_client.delete_container.side_effect = missing
+
+        blob.purge()
+
+        container_client.delete_container.assert_called_once()
+
     def test_purge_http_error_raises_delete_error(self) -> None:
         """Test that purge() raises DeleteError on non-404 HTTP error."""
 
