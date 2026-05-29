@@ -13,17 +13,19 @@ covers:
 
 import json
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-from azure.core.exceptions import HttpResponseError, ResourceExistsError
+from azure.core.exceptions import HttpResponseError, ResourceExistsError, ResourceNotFoundError
 from azure.data.tables import TableClient, TableServiceClient, TableTransactionError, UpdateMode
 from ds_resource_plugin_py_lib.common.resource.dataset.errors import (
     CreateError,
     DatasetException,
     DeleteError,
     ReadError,
+    UpdateError,
+    UpsertError,
 )
 from ds_resource_plugin_py_lib.common.resource.errors import NotSupportedError, ValidationError
 
@@ -31,6 +33,7 @@ from ds_provider_azure_py_lib.dataset.table import (
     AzureTable,
     AzureTableDatasetSettings,
     AzureTableDeserializer,
+    CreateSettings,
     PurgeSettings,
     ReadSettings,
 )
@@ -167,6 +170,13 @@ def _make_table_transaction_error():
     return TableTransactionError(message="boom", response=MagicMock())
 
 
+def _make_table_not_found_transaction_error():
+    err = TableTransactionError(message="0:The table specified does not exist.", response=MagicMock())
+    err.message = "0:The table specified does not exist."
+    err.status_code = 404
+    return err
+
+
 def _make_linked_service_and_table_client():
     table_client = MagicMock(spec=TableClient)
     svc = MagicMock(spec=TableServiceClient)
@@ -211,6 +221,31 @@ def test_build_transaction_from_input_maps_errors():
         ds._build_transaction_from_input("delete")
 
 
+@pytest.mark.parametrize(
+    ("operation", "expected_error"),
+    [
+        ("create", CreateError),
+        ("update", UpdateError),
+        ("upsert", UpsertError),
+        ("delete", DeleteError),
+    ],
+)
+def test_build_transaction_from_input_maps_dataset_exception_by_operation(operation, expected_error):
+    linked, _, _ = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+    ds._prepare_content = MagicMock(side_effect=DatasetException("boom", status_code=400))
+
+    with pytest.raises(expected_error):
+        ds._build_transaction_from_input(operation)
+
+
 def test_submit_transaction_noop_and_maps_errors():
     linked, table_client, _ = _make_linked_service_and_table_client()
     ds = AzureTable(
@@ -240,9 +275,33 @@ def test_create_table_handles_exists_and_http_error():
     svc.create_table.assert_called_once()
     svc.create_table.side_effect = ResourceExistsError()
     ds._create_table()
+    conflict = HttpResponseError(message="x")
+    conflict.error_code = "TableAlreadyExists"
+    conflict.status_code = 409
+    svc.create_table.side_effect = conflict
+    ds._create_table()
     svc.create_table.side_effect = HttpResponseError(message="x")
     with pytest.raises(CreateError):
         ds._create_table()
+
+
+def test_create_table_retries_when_table_is_being_deleted():
+    linked, _, svc = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    err = HttpResponseError(message="x")
+    err.error_code = "TableBeingDeleted"
+    svc.create_table.side_effect = err
+    ds._retry_create = MagicMock()
+
+    ds._create_table()
+
+    ds._retry_create.assert_called_once()
 
 
 def test_delete_table_success_and_error():
@@ -313,6 +372,25 @@ def test_create_success_table_transaction_and_http_error():
         ds.create()
 
 
+def test_create_allows_existing_table_and_submits_entities():
+    linked, table_client, svc = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+    svc.create_table.side_effect = ResourceExistsError()
+
+    ds.create()
+
+    svc.create_table.assert_called_once_with(table_name="t")
+    table_client.submit_transaction.assert_called_once()
+    assert ds.output.equals(ds.input)
+
+
 def test_update_calls_submit_with_merge_mode():
     linked, table_client, _ = _make_linked_service_and_table_client()
     ds = AzureTable(
@@ -366,6 +444,26 @@ def test_delete_with_delete_table_flag_and_entity_path():
     ds2.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
     ds2.delete()
     table_client.submit_transaction.assert_called()
+
+
+def test_delete_handles_404_and_re_raises_other_delete_errors():
+    linked, _, _ = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    ds.input = pd.DataFrame([{"PartitionKey": "p", "RowKey": "1"}])
+
+    ds._submit_transaction = MagicMock(side_effect=DeleteError("not found", status_code=404))
+    ds.delete()
+    assert ds.output.equals(ds.input)
+
+    ds._submit_transaction = MagicMock(side_effect=DeleteError("boom", status_code=500))
+    with pytest.raises(DeleteError):
+        ds.delete()
 
 
 def test_get_details_includes_read_and_delete_settings():
@@ -730,3 +828,156 @@ def test_table_purge_http_error() -> None:
 
     with pytest.raises(DeleteError, match="Failed to purge entities"):
         table.purge()
+
+
+def test_table_purge_404_is_treated_as_already_purged() -> None:
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test", purge=PurgeSettings(delete_table=False)),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.0",
+        description="test",
+    )
+
+    mock_table_client = MagicMock()
+    not_found = HttpResponseError(message="not found")
+    not_found.status_code = 404
+    mock_table_client.list_entities.side_effect = not_found
+    table.linked_service.connection.table_service_client.get_table_client.return_value = mock_table_client
+
+    table.purge()
+
+
+def test_upsert_with_empty_input_noop() -> None:
+    linked_service, _ = make_linked_service_with_table_client()
+    table = AzureTable(
+        deserializer=MagicMock(),
+        serializer=MagicMock(),
+        settings=AzureTableDatasetSettings(table_name="test"),
+        linked_service=linked_service,
+        id="test-id",
+        name="test-table",
+        version="1.0.0",
+        description="test",
+    )
+
+    table.input = pd.DataFrame()
+    table.upsert()
+    assert isinstance(table.output, pd.DataFrame)
+    assert table.output.empty
+
+    table.input = None
+    table.upsert()
+    assert isinstance(table.output, pd.DataFrame)
+    assert table.output.empty
+
+
+def _make_table_with_settings(retries=3, sleep=0):
+    settings = AzureTableDatasetSettings(
+        table_name=..., create=CreateSettings(retries_number=retries, sleep_seconds_between_retries=sleep)
+    )
+    table = AzureTable(
+        id=...,
+        name=...,
+        version=...,
+        linked_service=MagicMock(),
+        settings=settings,
+    )
+    return table
+
+
+def test_retry_create_success_on_first_try():
+    table = _make_table_with_settings()
+    table.linked_service.connection.table_service_client.create_table = MagicMock()
+    table._retry_create()  # Should not raise
+
+
+def test_retry_create_table_being_deleted_then_success():
+    table = _make_table_with_settings(retries=2)
+    svc = table.linked_service.connection.table_service_client
+    err = HttpResponseError(message="TableBeingDeleted")
+    err.error_code = "TableBeingDeleted"
+    svc.create_table = MagicMock(side_effect=[err, None])
+    with patch("time.sleep"):
+        table.settings.table_name = "test"
+        table._retry_create()  # Should not raise
+
+
+def test_retry_create_gives_up_and_raises():
+    table = _make_table_with_settings(retries=2)
+    svc = table.linked_service.connection.table_service_client
+    svc.create_table = MagicMock(side_effect=HttpResponseError(message="TableBeingDeleted", error_code="TableBeingDeleted"))
+    with patch("time.sleep"), pytest.raises(CreateError):
+        table._retry_create()
+
+
+def test_retry_create_noops_when_table_already_exists_after_waiting():
+    table = _make_table_with_settings(retries=1)
+    svc = table.linked_service.connection.table_service_client
+    svc.create_table = MagicMock(side_effect=ResourceExistsError(message="exists"))
+
+    table._retry_create()
+    svc.create_table.assert_called_once()
+
+
+def test_retry_create_exhausts_retries_on_table_being_deleted():
+    table = _make_table_with_settings(retries=2)
+    svc = table.linked_service.connection.table_service_client
+    err = HttpResponseError(message="TableBeingDeleted")
+    err.error_code = "TableBeingDeleted"
+    svc.create_table = MagicMock(side_effect=[err, err])
+
+    with patch("time.sleep"), pytest.raises(CreateError, match="after 2 retries"):
+        table._retry_create()
+
+
+def test_wait_for_table_deletion_confirms_deletion(monkeypatch):
+    table = _make_table_with_settings()
+
+    # Mock TableClient and list_entities to raise ResourceNotFoundError with error_code "TableNotFound"
+    class FakeResourceNotFoundError(ResourceNotFoundError):
+        def __init__(self):
+            self.error_code = "TableNotFound"
+
+    fake_table_client = MagicMock()
+    m = MagicMock()
+    m.__iter__.side_effect = FakeResourceNotFoundError()
+    fake_table_client.list_entities.return_value = m
+
+    # Patch _get_table_client to return our fake client
+    monkeypatch.setattr(table, "_get_table_client", lambda: fake_table_client)
+
+    # Should not raise
+    table._wait_for_table_deletion()
+
+
+def test_wait_for_table_deletion_iterates_entities_before_confirming(monkeypatch):
+    table = _make_table_with_settings()
+    table.settings.purge.wait_after_table_deletion = True
+
+    class FakeResourceNotFoundError(ResourceNotFoundError):
+        def __init__(self):
+            self.error_code = "TableNotFound"
+
+    first_client = MagicMock()
+    first_client.list_entities.return_value = [{"PartitionKey": "p", "RowKey": "1"}]
+
+    second_client = MagicMock()
+
+    class _NotFoundIter:
+        def __iter__(self):
+            raise FakeResourceNotFoundError()
+
+    second_client.list_entities.return_value = _NotFoundIter()
+
+    calls = iter([first_client, second_client])
+    monkeypatch.setattr(table, "_get_table_client", lambda: next(calls))
+
+    with patch("ds_provider_azure_py_lib.dataset.table.t.sleep") as sleep_mock:
+        table._wait_for_table_deletion()
+
+    sleep_mock.assert_called_once()

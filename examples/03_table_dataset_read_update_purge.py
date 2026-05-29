@@ -19,7 +19,6 @@ Prerequisites:
 - The `ds_provider_azure_py_lib` library should be installed and accessible in the Python environment.
 """
 
-
 import os
 import uuid
 from datetime import date, time
@@ -30,7 +29,7 @@ from ds_resource_plugin_py_lib.common.resource.dataset.errors import ReadError
 
 from ds_provider_azure_py_lib.dataset import AzureTable, AzureTableDatasetSettings
 from ds_provider_azure_py_lib.dataset.table import AzureTableSerializer, AzureTableDeserializer, ReadSettings, \
-    PurgeSettings
+    PurgeSettings, CreateSettings
 from ds_provider_azure_py_lib.linked_service import AzureLinkedService, AzureLinkedServiceSettings
 
 
@@ -51,12 +50,12 @@ def main():
         settings=AzureTableDatasetSettings(
             table_name="testazurepackage",
             read=ReadSettings(query_filter="PartitionKey eq 'colors'"),
-            purge=PurgeSettings(delete_table=True)
+            purge=PurgeSettings(delete_table=True, wait_after_table_deletion=True),
+            create=CreateSettings(retry_on_table_being_deleted=True)
         ),
         linked_service=AzureLinkedService(
             settings=AzureLinkedServiceSettings(
-                account_name=os.environ.get("ACCOUNT_NAME"),
-                access_key=os.environ.get("ACCOUNT_KEY")
+                account_name=os.environ.get("ACCOUNT_NAME"), access_key=os.environ.get("ACCOUNT_KEY")
             ),
             id=uuid.uuid4(),
             name="testazurepackage",
@@ -123,7 +122,7 @@ def main():
     if not dataset.output.empty:
         print("\nTesting update operation...")
         dataset.input = dataset.output.copy()
-        dataset.input["Score"] = [99.5, 97.0]  # Modify some data
+        dataset.input["Score"] = [r/2 for r in dataset.input["Score"]]
         dataset.update()
         print("Update completed successfully!")
 
@@ -139,10 +138,6 @@ def main():
         dataset.purge()
         print("Delete completed successfully!")
 
-        print("Waiting 30 seconds for deletion to propagate...")
-        import time as t
-        t.sleep(30)  # Wait for deletion to propagate
-
         try:
             dataset.read()
             remaining_count = len(dataset.output)
@@ -152,6 +147,7 @@ def main():
             print(dataset.output)
         except ReadError:
             print("Table deleted successfully")
+    dataset.create()
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ Example:
 """
 
 import builtins
+import time as t
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Generic, NoReturn, TypeVar
@@ -44,6 +45,7 @@ import pandas as pd
 from azure.core.exceptions import (
     HttpResponseError,
     ResourceExistsError,
+    ResourceNotFoundError,
 )
 from azure.data.tables import TableClient, TableTransactionError, UpdateMode
 from ds_common_logger_py_lib import Logger
@@ -102,6 +104,36 @@ class PurgeSettings:
     If True, the entire table will be deleted when purge() is called.
     If False, only the table content will be deleted.
     """
+    wait_after_table_deletion: bool = False
+    """
+    If True, waits for confirmation that the table has been deleted after the delete_table operation.
+    If False, returns immediately after initiating the deletion.
+    """
+    delete_table_wait_retries: int = 10
+    """
+    Maximum number of retries to wait for table deletion confirmation before giving up.
+    """
+    delete_table_sleep_seconds_between_retries: int = 3
+    """
+    Number of seconds to sleep between retry attempts when waiting for table deletion confirmation.
+    """
+
+
+@dataclass(kw_only=True)
+class CreateSettings:
+    sleep_seconds_between_retries: int = 30
+    """
+    Number of seconds to sleep between retry attempts when creating a table.
+    """
+    retry_on_table_being_deleted: bool = True
+    """
+    If True, retries table creation when the table is being deleted.
+    If False, raises an error immediately.
+    """
+    retries_number: int = 10
+    """
+    Maximum number of retries to attempt when creating a table.
+    """
 
 
 @dataclass(kw_only=True)
@@ -125,6 +157,7 @@ class AzureTableDatasetSettings(DatasetSettings):
 
     By default, read() will use read without filter.
     """
+    create: CreateSettings = field(default_factory=lambda: CreateSettings())
 
 
 AzureTableDatasetSettingsType = TypeVar(
@@ -310,10 +343,16 @@ class AzureTable(
                 table_name=self.settings.table_name,
             )
             logger.info(f"Table ({self.settings.table_name}) successfully created.")
-        except ResourceExistsError:
-            logger.debug(f"Table ({self.settings.table_name}) already exists.")
-        except HttpResponseError as exc:
-            raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
+        except (ResourceExistsError, HttpResponseError) as exc:
+            if self.settings.create.retry_on_table_being_deleted and getattr(exc, "error_code", None) == "TableBeingDeleted":
+                self._retry_create()
+
+            elif self._is_table_already_exists_error(exc):
+                logger.debug(f"Table ({self.settings.table_name}) already exists.")
+                return
+
+            else:
+                raise CreateError(f"Failed to create table in Azure Table Storage: {exc!s}", details=self.get_details()) from exc
 
     def read(self, **_kwargs: Any) -> None:
         """
@@ -458,6 +497,7 @@ class AzureTable(
         if self.settings.purge.delete_table:
             # Delete the entire table
             self._delete_table()
+            self._wait_for_table_deletion()
         else:
             # Delete all entities from the table
             try:
@@ -516,3 +556,53 @@ class AzureTable(
             details["delete_table"] = str(purge_settings.delete_table)
 
         return details
+
+    def _wait_for_table_deletion(self) -> None:
+        if not self.settings.purge.wait_after_table_deletion:
+            return
+
+        retries = self.settings.purge.delete_table_wait_retries
+        for attempt in range(retries):
+            table_client = self._get_table_client()
+            entities = table_client.list_entities()
+            try:
+                for entity in entities:
+                    _ = entity
+                    break  # no need to check all entities, if any are found, the table is not yet deleted
+            except ResourceNotFoundError as exc:
+                if getattr(exc, "error_code", None) == "TableNotFound":
+                    logger.info("Confirmed table deletion.")
+                    return
+            if attempt < retries - 1:
+                t.sleep(self.settings.purge.delete_table_sleep_seconds_between_retries)
+        logger.error("Table deletion not confirmed after waiting.")
+
+    def _retry_create(self) -> None:
+        for _ in range(self.settings.create.retries_number):
+            try:
+                self.linked_service.connection.table_service_client.create_table(table_name=self.settings.table_name)
+                logger.info(f"Table ({self.settings.table_name}) successfully created after waiting for deletion.")
+                return
+            except (ResourceExistsError, HttpResponseError) as inner_exc:
+                if self._is_table_already_exists_error(inner_exc):
+                    logger.debug(f"Table ({self.settings.table_name}) already exists.")
+                    return
+                if getattr(inner_exc, "error_code", None) == "TableBeingDeleted":
+                    logger.debug(f"Table ({self.settings.table_name}) is still being deleted. Waiting before retrying...")
+                    t.sleep(self.settings.create.sleep_seconds_between_retries)
+                else:
+                    logger.error(f"Failed to create table ({self.settings.table_name}) after deletion: {inner_exc.message}")
+                    raise CreateError(
+                        f"Failed to create table in Azure Table Storage after waiting for deletion: {inner_exc!s}",
+                        details=self.get_details(),
+                    ) from inner_exc
+
+        raise CreateError(
+            f"Failed to create table in Azure Table Storage after {self.settings.create.retries_number} retries"
+            f" waiting for deletion.",
+            details=self.get_details(),
+        )
+
+    @staticmethod
+    def _is_table_already_exists_error(exc: Exception) -> bool:
+        return isinstance(exc, ResourceExistsError) or getattr(exc, "error_code", None) == "TableAlreadyExists"
