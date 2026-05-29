@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'darwin'",
@@ -581,7 +581,7 @@ wheels = [
 
 [[package]]
 name = "ds-provider-azure-py-lib"
-version = "0.1.0a7"
+version = "0.1.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "azure-data-tables" },
