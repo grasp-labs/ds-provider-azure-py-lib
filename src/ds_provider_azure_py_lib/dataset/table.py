@@ -361,7 +361,6 @@ class AzureTable(
                 self._retry_create()
 
             elif self._is_table_already_exists_error(exc):
-                logger.debug(f"Table ({self.settings.table_name}) already exists.")
                 return
 
             else:
@@ -611,7 +610,6 @@ class AzureTable(
                 return
             except (ResourceExistsError, HttpResponseError) as inner_exc:
                 if self._is_table_already_exists_error(inner_exc):
-                    logger.debug(f"Table ({self.settings.table_name}) already exists.")
                     return
                 if getattr(inner_exc, "error_code", None) == "TableBeingDeleted":
                     logger.debug(f"Table ({self.settings.table_name}) is still being deleted. Waiting before retrying...")
