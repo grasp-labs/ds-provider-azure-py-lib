@@ -70,6 +70,14 @@ from ..serde import AzureTableDeserializer, AzureTableSerializer
 logger = Logger.get_logger(__name__, package=True)
 
 TransactionEntry = tuple[str, dict[str, Any]] | tuple[str, dict[str, Any], Mapping[str, Any]]
+_MAX_ERROR_MESSAGE_LENGTH = 500
+
+
+def _compact_azure_error_message(message: Any, fallback: str) -> str:
+    compact_message = " ".join(str(message or fallback).split())
+    if len(compact_message) <= _MAX_ERROR_MESSAGE_LENGTH:
+        return compact_message
+    return f"{compact_message[: _MAX_ERROR_MESSAGE_LENGTH - 3]}..."
 
 
 @dataclass(kw_only=True)
@@ -304,11 +312,16 @@ class AzureTable(
                 return
             table_client.submit_transaction(transaction)
         except (TableTransactionError, HttpResponseError) as exc:
-            logger.error(f"{error_cls.__class__.__name__}: {exc.message}")
-            if exc.status_code:
-                raise error_cls(message=exc.message, status_code=exc.status_code, details=self.get_details()) from exc
+            message = _compact_azure_error_message(
+                getattr(exc, "message", None),
+                f"{error_cls.__name__} failed in Azure Table Storage.",
+            )
+            details = self._get_transaction_error_details(exc)
+            status_code = getattr(exc, "status_code", None)
+            if status_code is not None:
+                raise error_cls(message=message, status_code=status_code, details=details) from None
             else:
-                raise error_cls(message=exc.message, details=self.get_details()) from exc
+                raise error_cls(message=message, details=details) from None
 
     def _delete_table(self) -> None:
         """
@@ -348,7 +361,6 @@ class AzureTable(
                 self._retry_create()
 
             elif self._is_table_already_exists_error(exc):
-                logger.debug(f"Table ({self.settings.table_name}) already exists.")
                 return
 
             else:
@@ -557,6 +569,19 @@ class AzureTable(
 
         return details
 
+    def _get_transaction_error_details(self, exc: TableTransactionError | HttpResponseError) -> dict[str, Any]:
+        details = self.get_details()
+
+        error_code = getattr(exc, "error_code", None)
+        if error_code is not None:
+            details["azure_error_code"] = str(getattr(error_code, "value", error_code))
+
+        transaction_index = getattr(exc, "index", None)
+        if transaction_index is not None:
+            details["azure_transaction_index"] = transaction_index
+
+        return details
+
     def _wait_for_table_deletion(self) -> None:
         if not self.settings.purge.wait_after_table_deletion:
             return
@@ -585,7 +610,6 @@ class AzureTable(
                 return
             except (ResourceExistsError, HttpResponseError) as inner_exc:
                 if self._is_table_already_exists_error(inner_exc):
-                    logger.debug(f"Table ({self.settings.table_name}) already exists.")
                     return
                 if getattr(inner_exc, "error_code", None) == "TableBeingDeleted":
                     logger.debug(f"Table ({self.settings.table_name}) is still being deleted. Waiting before retrying...")

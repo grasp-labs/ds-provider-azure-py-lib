@@ -262,6 +262,34 @@ def test_submit_transaction_noop_and_maps_errors():
         ds._submit_transaction([("create", {"PartitionKey": "p", "RowKey": "1"})], CreateError)
 
 
+def test_submit_transaction_compacts_batch_error_message_for_cloudwatch():
+    linked, table_client, _ = _make_linked_service_and_table_client()
+    ds = AzureTable(
+        settings=AzureTableDatasetSettings(table_name="t"),
+        linked_service=linked,
+        id=uuid.uuid4(),
+        name="testazurepackage",
+        version="0.0.1",
+    )
+    table_client.submit_transaction.side_effect = TableTransactionError(
+        message=f"0:Batch response body\nErrorCode:InvalidInput\n{'x' * 1000}",
+        response=MagicMock(),
+        status_code=400,
+    )
+    table_client.submit_transaction.side_effect.error_code = "InvalidInput"
+
+    with patch("ds_provider_azure_py_lib.dataset.table.logger.error") as log_error, pytest.raises(CreateError) as exc_info:
+        ds._submit_transaction([("create", {"PartitionKey": "p", "RowKey": "1"})], CreateError)
+
+    error = exc_info.value
+    log_error.assert_not_called()
+    assert "\n" not in error.message
+    assert len(error.message) <= 500
+    assert error.__suppress_context__ is True
+    assert error.details["azure_error_code"] == "InvalidInput"
+    assert error.details["azure_transaction_index"] == 0
+
+
 def test_create_table_handles_exists_and_http_error():
     linked, _, svc = _make_linked_service_and_table_client()
     ds = AzureTable(
