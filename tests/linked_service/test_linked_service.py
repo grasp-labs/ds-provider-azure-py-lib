@@ -149,6 +149,12 @@ class AzureLinkedServiceTests(unittest.TestCase):
         credential = svc.get_credential()
         self.assertIsInstance(credential, ClientSecretCredential)
 
+    def test_get_credential_raises_when_no_valid_credential(self):
+        settings = AzureLinkedServiceSettings(account_name="my_account", tenant_id="tenant")
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        with self.assertRaises(AuthenticationError):
+            svc.get_credential()
+
     @patch("ds_provider_azure_py_lib.linked_service.storage_account.TableServiceClient")
     @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient")
     def test_connect_with_client_credential(self, mock_blob_client_cls, mock_table_client_cls):
