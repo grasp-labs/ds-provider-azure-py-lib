@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from azure.core.credentials import AzureNamedKeyCredential
+from azure.identity import ClientSecretCredential
 from ds_resource_plugin_py_lib.common.resource.linked_service.errors import (
     AuthenticationError,
     ConnectionError,
@@ -111,6 +112,60 @@ class AzureLinkedServiceTests(unittest.TestCase):
         svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
         with self.assertRaises(AuthenticationError):
             svc.check_settings_is_set()
+
+    def test_check_settings_missing_all_credentials_raises(self):
+        settings = AzureLinkedServiceSettings(account_name="my_account")
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        with self.assertRaises(AuthenticationError):
+            svc.check_settings_is_set()
+
+    def test_check_settings_partial_client_credential_raises(self):
+        settings = AzureLinkedServiceSettings(
+            account_name="my_account", tenant_id="tenant", client_id="client"
+        )
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        with self.assertRaises(AuthenticationError):
+            svc.check_settings_is_set()
+
+    def test_check_settings_client_credential_valid(self):
+        settings = AzureLinkedServiceSettings(
+            account_name="my_account", tenant_id="tenant", client_id="client", client_secret="secret"
+        )
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        # should not raise
+        svc.check_settings_is_set()
+
+    def test_get_credential_uses_access_key_when_set(self):
+        settings = AzureLinkedServiceSettings(account_name="my_account", access_key="123")
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        credential = svc.get_credential()
+        self.assertIsInstance(credential, AzureNamedKeyCredential)
+
+    def test_get_credential_uses_client_secret_when_no_access_key(self):
+        settings = AzureLinkedServiceSettings(
+            account_name="my_account", tenant_id="tenant", client_id="client", client_secret="secret"
+        )
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        credential = svc.get_credential()
+        self.assertIsInstance(credential, ClientSecretCredential)
+
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.TableServiceClient")
+    @patch("ds_provider_azure_py_lib.linked_service.storage_account.BlobServiceClient")
+    def test_connect_with_client_credential(self, mock_blob_client_cls, mock_table_client_cls):
+        settings = AzureLinkedServiceSettings(
+            account_name="my_account", tenant_id="tenant", client_id="client", client_secret="secret"
+        )
+        svc = AzureLinkedService(settings=settings, id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
+        svc.connect()
+        self.assertIsInstance(svc._credential, ClientSecretCredential)
+        mock_blob_client_cls.assert_called_with(
+            account_url="https://my_account.blob.core.windows.net/",
+            credential=svc._credential,
+        )
+        mock_table_client_cls.assert_called_with(
+            endpoint="https://my_account.table.core.windows.net/",
+            credential=svc._credential,
+        )
 
     def test_blob_service_client_without_connect_raises(self):
         svc = AzureLinkedService(settings=self._mock_settings(), id=uuid.uuid4(), name="testazurepackage", version="0.0.1")
