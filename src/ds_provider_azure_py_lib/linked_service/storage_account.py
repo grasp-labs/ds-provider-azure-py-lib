@@ -9,7 +9,7 @@ Authentication supports either an account access key (shared key) or an Azure AD
 service principal (client credentials).
 
 Example (access key):
->>>linked_service = AzureLinkedService(
+>>> linked_service = AzureLinkedService(
 ...        settings=AzureLinkedServiceSettings(
 ...            account_name="account name",
 ...            access_key="account key",
@@ -21,7 +21,7 @@ Example (access key):
 ...    )
 
 Example (client credentials):
->>>linked_service = AzureLinkedService(
+>>> linked_service = AzureLinkedService(
 ...        settings=AzureLinkedServiceSettings(
 ...            account_name="account name",
 ...            tenant_id="tenant id",
@@ -52,6 +52,10 @@ from ds_resource_plugin_py_lib.common.resource.linked_service.errors import (
 from ..enums import ResourceType
 
 logger = Logger.get_logger(__name__, package=True)
+
+_AUTH_REQUIRED_MESSAGE = (
+    "Access Key, or Tenant ID, Client ID and Client Secret, are required for Azure authentication."
+)
 
 
 @dataclass(kw_only=True)
@@ -110,6 +114,8 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             None
         Raises:
             AttributeError: If settings are not set correctly.
+            AuthenticationError: If the account name, or a full set of credentials
+                (access key, or tenant/client id and secret), is missing.
         """
         if not isinstance(self.settings, AzureLinkedServiceSettings):
             raise AttributeError("settings not set.")
@@ -123,10 +129,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
         )
 
         if not has_access_key and not has_client_credential:
-            raise AuthenticationError(
-                "Either Access Key, or Tenant ID, Client ID and Client Secret "
-                "are required for Azure authentication."
-            )
+            raise AuthenticationError(_AUTH_REQUIRED_MESSAGE)
 
     @property
     def type(self) -> ResourceType:
@@ -220,16 +223,19 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
 
         Returns:
             AzureNamedKeyCredential | ClientSecretCredential
+        Raises:
+            AuthenticationError: If the account name, or a full set of credentials
+                (access key, or tenant/client id and secret), is missing.
         """
+        if not self.settings.account_name:
+            raise AuthenticationError("Account Name is required for Azure authentication.")
         if self.settings.access_key:
             return AzureNamedKeyCredential(
                 name=self.settings.account_name,
                 key=self.settings.access_key,
             )
         if not (self.settings.tenant_id and self.settings.client_id and self.settings.client_secret):
-            raise AuthenticationError(
-                "Either Access Key, or Tenant ID, Client ID and Client Secret are required for Azure authentication."
-            )
+            raise AuthenticationError(_AUTH_REQUIRED_MESSAGE)
         return ClientSecretCredential(
             tenant_id=self.settings.tenant_id,
             client_id=self.settings.client_id,
