@@ -5,11 +5,28 @@
 Azure Linked Service
 
 This module implements a linked service for Azure Storage services (Blob and Table).
-Example:
->>>linked_service = AzureLinkedService(
+Authentication supports either an account access key (shared key) or an Azure AD
+service principal (client credentials).
+
+Example (access key):
+>>> linked_service = AzureLinkedService(
 ...        settings=AzureLinkedServiceSettings(
 ...            account_name="account name",
 ...            access_key="account key",
+...        ),
+...        id=uuid.uuid4(),
+...        name="testazurepackage",
+...        version="0.0.1",
+...        description="testazurepackage"
+...    )
+
+Example (client credentials):
+>>> linked_service = AzureLinkedService(
+...        settings=AzureLinkedServiceSettings(
+...            account_name="account name",
+...            tenant_id="tenant id",
+...            client_id="client id",
+...            client_secret="client secret",
 ...        ),
 ...        id=uuid.uuid4(),
 ...        name="testazurepackage",
@@ -23,6 +40,7 @@ from typing import Generic, TypeVar
 
 from azure.core.credentials import AzureNamedKeyCredential
 from azure.data.tables import TableServiceClient
+from azure.identity import ClientSecretCredential
 from azure.storage.blob import BlobServiceClient
 from ds_common_logger_py_lib import Logger
 from ds_resource_plugin_py_lib.common.resource.linked_service import LinkedService, LinkedServiceSettings
@@ -35,15 +53,25 @@ from ..enums import ResourceType
 
 logger = Logger.get_logger(__name__, package=True)
 
+_AUTH_REQUIRED_MESSAGE = (
+    "Access Key, or Tenant ID, Client ID and Client Secret, are required for Azure authentication."
+)
+
 
 @dataclass(kw_only=True)
 class AzureLinkedServiceSettings(LinkedServiceSettings):
     """
     The object containing the Azure linked service settings.
+
+    Either ``access_key`` or the full set of ``tenant_id``, ``client_id`` and
+    ``client_secret`` must be provided.
     """
 
     account_name: str
-    access_key: str = field(metadata={"mask": True})
+    access_key: str | None = field(default=None, metadata={"mask": True})
+    tenant_id: str | None = None
+    client_id: str | None = None
+    client_secret: str | None = field(default=None, metadata={"mask": True})
 
 
 AzureLinkedServiceSettingsType = TypeVar(
@@ -71,24 +99,37 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
     settings: AzureLinkedServiceSettingsType
     _blob_service_client: BlobServiceClient | None = None
     _table_service_client: TableServiceClient | None = None
-    _credential: AzureNamedKeyCredential | None = field(default=None, metadata={"serialize": False})
+    _credential: AzureNamedKeyCredential | ClientSecretCredential | None = field(
+        default=None, metadata={"serialize": False}
+    )
 
     def check_settings_is_set(self) -> None:
         """
         Check if settings are set correctly.
 
+        Either ``access_key`` or the full set of ``tenant_id``, ``client_id`` and
+        ``client_secret`` must be provided.
+
         Returns:
             None
         Raises:
             AttributeError: If settings are not set correctly.
+            AuthenticationError: If the account name, or a full set of credentials
+                (access key, or tenant/client id and secret), is missing.
         """
         if not isinstance(self.settings, AzureLinkedServiceSettings):
             raise AttributeError("settings not set.")
 
-        if not self.settings.access_key:
-            raise AuthenticationError("Access Key is required for Azure Named Key authentication.")
         if not self.settings.account_name:
-            raise AuthenticationError("Account Name is required for Azure Named Key authentication.")
+            raise AuthenticationError("Account Name is required for Azure authentication.")
+
+        has_access_key = bool(self.settings.access_key)
+        has_client_credential = bool(
+            self.settings.tenant_id and self.settings.client_id and self.settings.client_secret
+        )
+
+        if not has_access_key and not has_client_credential:
+            raise AuthenticationError(_AUTH_REQUIRED_MESSAGE)
 
     @property
     def type(self) -> ResourceType:
@@ -173,6 +214,34 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             credential=self._credential,
         )
 
+    def get_credential(self) -> AzureNamedKeyCredential | ClientSecretCredential:
+        """
+        Build the credential used to authenticate against Azure Storage.
+
+        Prefers the account access key when set, otherwise falls back to
+        client credential (service principal) authentication.
+
+        Returns:
+            AzureNamedKeyCredential | ClientSecretCredential
+        Raises:
+            AuthenticationError: If the account name, or a full set of credentials
+                (access key, or tenant/client id and secret), is missing.
+        """
+        if not self.settings.account_name:
+            raise AuthenticationError("Account Name is required for Azure authentication.")
+        if self.settings.access_key:
+            return AzureNamedKeyCredential(
+                name=self.settings.account_name,
+                key=self.settings.access_key,
+            )
+        if not (self.settings.tenant_id and self.settings.client_id and self.settings.client_secret):
+            raise AuthenticationError(_AUTH_REQUIRED_MESSAGE)
+        return ClientSecretCredential(
+            tenant_id=self.settings.tenant_id,
+            client_id=self.settings.client_id,
+            client_secret=self.settings.client_secret,
+        )
+
     def connect(self) -> None:
         """
         Connect to Azure Storage (Blob and Table), ensuring both service clients are initialized.
@@ -181,10 +250,7 @@ class AzureLinkedService(LinkedService[AzureLinkedServiceSettingsType], Generic[
             None
         """
         self.check_settings_is_set()
-        self._credential = AzureNamedKeyCredential(
-            name=self.settings.account_name,
-            key=self.settings.access_key,
-        )
+        self._credential = self.get_credential()
         self._blob_service_client = self.get_blob_service()
         self._table_service_client = self.get_table_service()
         logger.debug("Connected to Azure StorageAccount.")
