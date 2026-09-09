@@ -321,7 +321,7 @@ class AzureTable(
             if status_code is not None:
                 raise error_cls(message=message, status_code=status_code, details=details) from exc
             else:
-                raise error_cls(message=message, details=details) from None
+                raise error_cls(message=message, details=details) from exc
 
     def _delete_table(self) -> None:
         """
